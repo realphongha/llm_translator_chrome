@@ -53,7 +53,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
     base: "",
     key: "",
     model: "",
-    parallelCalls: 8,
+    parallelCalls: 32,
     timeout: 60,
   },
   translation: {

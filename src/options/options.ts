@@ -89,7 +89,7 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
       base: apiBase.value.trim(),
       key: apiKey.value.trim(),
       model: apiModel.value.trim(),
-      parallelCalls: parseInt(apiParallel.value) || 8,
+      parallelCalls: parseInt(apiParallel.value) || 32,
       timeout: parseInt(apiTimeout.value) || 60,
     };
     await saveGlobalConfig(cfg);
