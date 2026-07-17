@@ -36,7 +36,6 @@ export interface ChatCompletionRequest {
   top_k?: number;
   min_p?: number;
   presence_penalty?: number;
-  repeat_penalty?: number;
   chat_template_kwargs?: Record<string, unknown>;
 }
 
@@ -83,7 +82,7 @@ export async function callChatCompletions(
   if (config.top_k !== undefined) body.top_k = config.top_k;
   if (config.min_p !== undefined) body.min_p = config.min_p;
   if (config.presence_penalty !== undefined) body.presence_penalty = config.presence_penalty;
-  if (config.chat_template_kwargs !== undefined) body.chat_template_kwargs = config.chat_template_kwargs;
+  body.chat_template_kwargs = config.chat_template_kwargs ?? { enable_thinking: false };
 
   const controller = new AbortController();
   const timeoutId = setTimeout(
