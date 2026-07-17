@@ -217,6 +217,17 @@ html, body {
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
+.field-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.input--mono {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+}
+
 /* ── Inputs ──────────────────────────────────── */
 
 .input {

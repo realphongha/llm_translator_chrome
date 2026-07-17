@@ -32,6 +32,12 @@ export interface ChatCompletionRequest {
   messages: ChatMessage[];
   temperature?: number;
   max_tokens?: number;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
+  presence_penalty?: number;
+  repeat_penalty?: number;
+  chat_template_kwargs?: Record<string, unknown>;
 }
 
 export interface ChatCompletionResponse {
@@ -70,8 +76,14 @@ export async function callChatCompletions(
       { role: "system", content: systemPrompt },
       { role: "user", content: userPrompt },
     ],
-    temperature: 0.1,
   };
+
+  if (config.temperature !== undefined) body.temperature = config.temperature;
+  if (config.top_p !== undefined) body.top_p = config.top_p;
+  if (config.top_k !== undefined) body.top_k = config.top_k;
+  if (config.min_p !== undefined) body.min_p = config.min_p;
+  if (config.presence_penalty !== undefined) body.presence_penalty = config.presence_penalty;
+  if (config.chat_template_kwargs !== undefined) body.chat_template_kwargs = config.chat_template_kwargs;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(

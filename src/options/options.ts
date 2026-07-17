@@ -65,6 +65,12 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   const apiModel = document.getElementById("api-model") as HTMLInputElement;
   const apiParallel = document.getElementById("api-parallel") as HTMLInputElement;
   const apiTimeout = document.getElementById("api-timeout") as HTMLInputElement;
+  const apiTemperature = document.getElementById("api-temperature") as HTMLInputElement;
+  const apiTopP = document.getElementById("api-top-p") as HTMLInputElement;
+  const apiTopK = document.getElementById("api-top-k") as HTMLInputElement;
+  const apiMinP = document.getElementById("api-min-p") as HTMLInputElement;
+  const apiPresencePenalty = document.getElementById("api-presence-penalty") as HTMLInputElement;
+  const apiChatTemplateKwargs = document.getElementById("api-chat-template-kwargs") as HTMLInputElement;
   const btnSaveApi = document.getElementById("btn-save-api")!;
   const btnTestApi = document.getElementById("btn-test-api")!;
   const testResult = document.getElementById("test-result")!;
@@ -76,6 +82,12 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   apiModel.value = config.api.model;
   apiParallel.value = String(config.api.parallelCalls);
   apiTimeout.value = String(config.api.timeout);
+  if (config.api.temperature !== undefined) apiTemperature.value = String(config.api.temperature);
+  if (config.api.top_p !== undefined) apiTopP.value = String(config.api.top_p);
+  if (config.api.top_k !== undefined) apiTopK.value = String(config.api.top_k);
+  if (config.api.min_p !== undefined) apiMinP.value = String(config.api.min_p);
+  if (config.api.presence_penalty !== undefined) apiPresencePenalty.value = String(config.api.presence_penalty);
+  if (config.api.chat_template_kwargs !== undefined) apiChatTemplateKwargs.value = JSON.stringify(config.api.chat_template_kwargs);
 
   // Show/hide key
   btnToggleKey.addEventListener("click", () => {
@@ -91,7 +103,25 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
       model: apiModel.value.trim(),
       parallelCalls: parseInt(apiParallel.value) || 32,
       timeout: parseInt(apiTimeout.value) || 60,
+      temperature: apiTemperature.value ? parseFloat(apiTemperature.value) : undefined,
+      top_p: apiTopP.value ? parseFloat(apiTopP.value) : undefined,
+      top_k: apiTopK.value ? parseInt(apiTopK.value) : undefined,
+      min_p: apiMinP.value ? parseFloat(apiMinP.value) : undefined,
+      presence_penalty: apiPresencePenalty.value ? parseFloat(apiPresencePenalty.value) : undefined,
     };
+
+    // Parse chat_template_kwargs JSON
+    const kwargsRaw = apiChatTemplateKwargs.value.trim();
+    if (kwargsRaw) {
+      try {
+        cfg.api.chat_template_kwargs = JSON.parse(kwargsRaw);
+      } catch {
+        showToast("Invalid JSON in Chat Template Kwargs", "error");
+        return;
+      }
+    } else {
+      cfg.api.chat_template_kwargs = undefined;
+    }
     await saveGlobalConfig(cfg);
     showToast("API settings saved!");
   });

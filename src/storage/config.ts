@@ -9,6 +9,12 @@ export interface ApiConfig {
   model: string;
   parallelCalls: number;
   timeout: number; // seconds
+  temperature?: number;
+  top_p?: number;
+  top_k?: number;
+  min_p?: number;
+  presence_penalty?: number;
+  chat_template_kwargs?: Record<string, unknown>;
 }
 
 export interface TranslationConfig {
@@ -62,6 +68,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
     model: "",
     parallelCalls: 32,
     timeout: 60,
+    temperature: 0.1,
   },
   translation: {
     maxChars: 4000,
