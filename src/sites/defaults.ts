@@ -16,6 +16,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     observe: ".article-wrapper",
     selector: ".article-wrapper p",
     ignore: [".comment-wrap", ".ads-area", ".qd_GamePlatform"],
+    priorityRules: [{ selector: ".article-wrapper p", priority: 1 }],
   },
   "m.qidian.com": {
     enabled: false,
@@ -25,6 +26,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     observe: ".read-content",
     selector: ".read-content p",
     ignore: [],
+    priorityRules: [{ selector: ".read-content p", priority: 1 }],
   },
   "www.novelupdates.com": {
     enabled: false,
@@ -34,6 +36,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     observe: "body",
     selector: "",
     ignore: [".navbar", "footer", ".sidebar"],
+    priorityRules: [],
   },
   "fanyi.baidu.com": {
     enabled: false,
@@ -43,6 +46,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     observe: "body",
     selector: "",
     ignore: [],
+    priorityRules: [],
   },
 };
 
@@ -54,6 +58,7 @@ const DEFAULT_PRESET: SitePreset = {
   observe: "body",
   selector: "",
   ignore: [],
+  priorityRules: [],
 };
 
 /**

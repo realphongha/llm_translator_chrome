@@ -26,7 +26,7 @@ import { testApiConnection } from "./api";
 // ── Message types ─────────────────────────────
 
 export type BgMessage =
-  | { type: "ENQUEUE"; items: Array<{ text: string; elementIndex: number }> }
+  | { type: "ENQUEUE"; items: Array<{ text: string; elementIndex: number; priority?: number }> }
   | { type: "TRANSLATE_NOW" }
   | { type: "RETRANSLATE" }
   | { type: "PAUSE" }
@@ -46,6 +46,7 @@ export type BgResponse =
 // ── Result forwarding to content scripts ─────
 
 onResults(async (tabId, results) => {
+  // Notify content script
   try {
     await chrome.tabs.sendMessage(tabId, {
       type: "TRANSLATION_RESULTS",
@@ -54,9 +55,19 @@ onResults(async (tabId, results) => {
   } catch {
     // Tab may have closed
   }
+
+  // Notify popup/options page if open
+  try {
+    await chrome.runtime.sendMessage({
+      type: "TRANSLATION_RESULTS",
+      tabId,
+      results,
+    }).catch(() => {});
+  } catch {}
 });
 
 onQueueChanged(async (tabId, count) => {
+  // Notify content script
   try {
     await chrome.tabs.sendMessage(tabId, {
       type: "QUEUE_COUNT",
@@ -65,6 +76,15 @@ onQueueChanged(async (tabId, count) => {
   } catch {
     // Tab may have closed
   }
+
+  // Notify popup/options page if open
+  try {
+    await chrome.runtime.sendMessage({
+      type: "QUEUE_COUNT",
+      tabId,
+      count,
+    }).catch(() => {});
+  } catch {}
 });
 
 // ── Track active translation sessions ─────────
@@ -79,10 +99,9 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
     const globalConfig = await loadGlobalConfig();
 
     if (!globalConfig.api.base || !globalConfig.api.model) {
-      await chrome.tabs.sendMessage(tabId, {
-        type: "TRANSLATION_ERROR",
-        error: "API not configured. Please open Settings.",
-      }).catch(() => {});
+      const err = "API not configured. Please open Settings.";
+      await chrome.tabs.sendMessage(tabId, { type: "TRANSLATION_ERROR", error: err }).catch(() => {});
+      await chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", tabId, error: err }).catch(() => {});
       return;
     }
 
@@ -99,6 +118,9 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
     }
 
     if (!siteConfig.enabled) {
+      clearQueue(tabId);
+      // Tell content script to disable itself (restore originals, stop observer)
+      await chrome.tabs.sendMessage(tabId, { type: "RETRANSLATE" }).catch(() => {});
       activeSessions.delete(tabId);
       return;
     }

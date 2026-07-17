@@ -8,9 +8,11 @@ import {
   restoreOriginals,
   isTranslated,
   ATTR_TRANSLATION_ID,
+  ATTR_ORIGINAL,
+  ATTR_PRIORITY,
 } from "./extractor";
 import { applyTranslations, injectStyles, markElementsTranslating, revertTranslatingElement, revertStuckElements } from "./renderer";
-import type { SiteConfig } from "../storage/config";
+import type { SiteConfig, PriorityRule } from "../storage/config";
 import type { TranslationResult } from "../background/queue";
 
 // ── Constants ─────────────────────────────────
@@ -26,11 +28,31 @@ let enabled = true;
 let queueCount = 0;
 let pendingIndices = new Set<number>();
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
+let isReloading = false;
+
+async function reloadAndRetranslate(): Promise<void> {
+  if (isReloading) return;
+  isReloading = true;
+  try {
+    cancelCleanup();
+    observer?.stop();
+    restoreOriginals();
+    pendingIndices.clear();
+    await init();
+  } finally {
+    isReloading = false;
+  }
+}
 
 // ── Init ──────────────────────────────────────
 
 async function init(): Promise<void> {
   injectStyles();
+
+  // Wait a small moment (300ms) to let client-side frameworks (React, Vue, etc.)
+  // render their initial content before extraction. This allows priority rules
+  // to be applied to a more complete DOM state.
+  await new Promise((resolve) => setTimeout(resolve, 300));
 
   // Request site config from background
   const hostname = location.hostname;
@@ -46,6 +68,9 @@ async function init(): Promise<void> {
 
   siteConfig = response.data as SiteConfig;
   enabled = siteConfig.enabled;
+
+  // Clear any existing queue items for this tab first to avoid translating stale nodes
+  await sendToBackground({ type: "CLEAR_QUEUE" });
 
   if (!enabled) return;
 
@@ -64,17 +89,15 @@ async function init(): Promise<void> {
   const allNodes = extractTranslatableNodes(
     document,
     siteConfig.selector || "",
-    siteConfig.ignore || []
+    siteConfig.ignore || [],
+    siteConfig.priorityRules || []
   );
 
-  // Enqueue in chunks from top to bottom so translation results
-  // appear gradually rather than waiting for every node to finish.
+  // Enqueue all elements together so the background queue has the full set of
+  // nodes to sort and prioritize. Streaming to the user is handled incrementally
+  // by the background script after each sub-batch completion.
   if (allNodes.length > 0) {
-    for (let i = 0; i < allNodes.length; i += CHUNK_SIZE) {
-      const chunk = allNodes.slice(i, i + CHUNK_SIZE);
-      const delay = (i / CHUNK_SIZE) * CHUNK_DELAY;
-      setTimeout(() => enqueueNodes(chunk).catch(console.error), delay);
-    }
+    enqueueNodes(allNodes).catch(console.error);
   }
 
   // Start observer for dynamic content
@@ -98,7 +121,8 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
       const extracted = extractTranslatableNodes(
         root,
         siteConfig.selector || "",
-        siteConfig.ignore || []
+        siteConfig.ignore || [],
+        siteConfig.priorityRules || []
       );
       newNodes.push(...extracted);
     }
@@ -122,6 +146,7 @@ async function enqueueNodes(
   const items = nodes.map((n) => ({
     text: n.text,
     elementIndex: n.elementIndex,
+    priority: n.priority !== Infinity ? n.priority : undefined,
   }));
 
   // Track pending so cleanup doesn't fire prematurely
@@ -164,7 +189,8 @@ function scheduleCleanup(): void {
       const nodes = extractTranslatableNodes(
         document,
         siteConfig.selector || "",
-        siteConfig.ignore || []
+        siteConfig.ignore || [],
+        siteConfig.priorityRules || []
       );
       if (nodes.length > 0) {
         enqueueNodes(nodes);
@@ -202,23 +228,7 @@ chrome.runtime.onMessage.addListener(
       }
 
       case "RETRANSLATE": {
-        cancelCleanup();
-        pendingIndices.clear();
-        restoreOriginals();
-        if (siteConfig) {
-          const nodes = extractTranslatableNodes(
-            document,
-            siteConfig.selector || "",
-            siteConfig.ignore || []
-          );
-          if (nodes.length > 0) {
-            for (let i = 0; i < nodes.length; i += CHUNK_SIZE) {
-              const chunk = nodes.slice(i, i + CHUNK_SIZE);
-              const delay = (i / CHUNK_SIZE) * CHUNK_DELAY;
-              setTimeout(() => enqueueNodes(chunk).catch(console.error), delay);
-            }
-          }
-        }
+        reloadAndRetranslate().catch(console.error);
         sendResponse({ ok: true });
         break;
       }
@@ -238,11 +248,221 @@ chrome.runtime.onMessage.addListener(
         break;
       }
 
+      case "SCAN_DOM": {
+        const scanSelector = (message.selector as string) || "";
+        const scanIgnore = (message.ignore as string[]) || [];
+        const scanRules = (message.priorityRules as PriorityRule[]) || [];
+        const result = scanDOM(scanSelector, scanIgnore, scanRules);
+        sendResponse({ ok: true, data: result });
+        break;
+      }
+
       default:
         sendResponse({ ok: false, error: "Unknown message" });
     }
   }
 );
+
+// ── DOM Scan (for popup debug) ───────────────
+
+interface ScanGroup {
+  selector: string;
+  count: number;
+  sampleText: string;
+  isSelected: boolean;
+  isIgnored: boolean;
+  reason: string;
+  suggestion: "content" | "ignore" | "priority" | "none";
+  priority: number;
+}
+
+/** Build a grouping key for an element (full CSS path, minus nth-child) */
+function getGroupKey(el: Element): string {
+  const parts: string[] = [];
+  let current: Element | null = el;
+  let depth = 0;
+  while (current && current !== document.body && depth < 4) {
+    let seg = current.tagName.toLowerCase();
+    if (current.id) {
+      parts.unshift("#" + current.id);
+      break;
+    }
+    const classes = Array.from(current.classList).filter(
+      c => !c.startsWith("data-") && c !== ATTR_TRANSLATION_ID
+    ).sort();
+    if (classes.length > 0) seg += "." + classes.join(".");
+    parts.unshift(seg);
+    current = current.parentElement;
+    depth++;
+  }
+  return parts.join(" > ");
+}
+
+/** Extract a short CSS selector from a full path (tag + meaningful classes only) */
+function shortenSelector(path: string): string {
+  // Take the last segment (deepest element)
+  const segments = path.split(" > ");
+  const last = segments[segments.length - 1];
+  // Filter out tailwind utility noise
+  const parts = last.split(".");
+  const tag = parts[0];
+  const meaningful = parts.slice(1).filter(c => {
+    if (/[[\]:]/.test(c)) return false;
+    if (/^\d/.test(c) || /[:]$/.test(c) || /^[0-9.]+(px|em|rem)$/.test(c)) return false;
+    if (c.startsWith("sm:") || c.startsWith("md:") || c.startsWith("lg:") || c.startsWith("xl:")) return false;
+    if (c.startsWith("hover:") || c.startsWith("focus:") || c.startsWith("active:")) return false;
+    return true;
+  });
+  if (meaningful.length > 0) return tag + "." + meaningful.join(".");
+  return tag;
+}
+
+/** Get display text from an element — returns translated text if available */
+function getDisplayText(el: Element): string {
+  // Direct span[data-translation-id]
+  if (el.hasAttribute(ATTR_TRANSLATION_ID)) {
+    const original = el.getAttribute(ATTR_ORIGINAL) || "";
+    const current = el.textContent || "";
+    if (current !== original) return current.trim();
+    return "";
+  }
+  // Parent might be the translated span
+  const p = el.parentElement;
+  if (p && p.hasAttribute(ATTR_TRANSLATION_ID)) {
+    return getDisplayText(p);
+  }
+  // Child might contain translated spans
+  const translated = el.querySelector(`[${ATTR_TRANSLATION_ID}]`);
+  if (translated) {
+    return getDisplayText(translated);
+  }
+  return "";
+}
+
+/** Get sample display text for a group */
+function getGroupSample(elements: Element[]): { text: string; translated: boolean } {
+  for (const el of elements) {
+    const display = getDisplayText(el);
+    if (display) return { text: display.slice(0, 120), translated: true };
+  }
+  // No translated text found — return first available original text
+  for (const el of elements) {
+    const text = (el.textContent || "").trim();
+    if (text) return { text: "", translated: false };
+  }
+  return { text: "", translated: false };
+}
+
+function scanDOM(
+  selector: string,
+  ignoreSelectors: string[],
+  priorityRules: PriorityRule[]
+): ScanGroup[] {
+  const groups = new Map<string, { elements: Element[] }>();
+
+  // Collect all text-containing elements in the document
+  const allElements: Element[] = [];
+
+  // 1. Walk elements with data-translation-id (already extracted)
+  const translatedEls = document.querySelectorAll(`[${ATTR_TRANSLATION_ID}]`);
+  for (const el of translatedEls) {
+    allElements.push(el);
+  }
+
+  // 2. Walk raw text nodes not yet extracted
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const seenText = new Set<Node>();
+  while (walker.nextNode()) {
+    const tn = walker.currentNode as Text;
+    if (seenText.has(tn)) continue;
+    seenText.add(tn);
+    const raw = (tn.textContent ?? "").trim();
+    if (!raw || !/\p{L}/u.test(raw)) continue;
+    if (!tn.parentElement) continue;
+    // Skip if already inside a translated wrapper
+    if (tn.parentElement.closest(`[${ATTR_TRANSLATION_ID}]`)) continue;
+    allElements.push(tn.parentElement);
+  }
+
+  // Group by container path
+  for (const el of allElements) {
+    // Find the container: for translated spans, use the parent that matches selector pattern
+    const container = el.hasAttribute(ATTR_TRANSLATION_ID) ? (el.parentElement || el) : el;
+    const key = getGroupKey(container);
+    if (!groups.has(key)) groups.set(key, { elements: [] });
+    groups.get(key)!.elements.push(container);
+  }
+
+  // Deduplicate elements within each group
+  for (const [, group] of groups) {
+    const seen = new Set<Element>();
+    group.elements = group.elements.filter(el => {
+      if (seen.has(el)) return false;
+      seen.add(el);
+      return true;
+    });
+  }
+
+  const results: ScanGroup[] = [];
+
+  for (const [path, group] of groups) {
+    const count = group.elements.length;
+    if (count === 0) continue;
+
+    const sampleEl = group.elements[0];
+    const isSelected = selector?.trim() ? !!sampleEl.closest(selector) : true;
+    const isIgnored = ignoreSelectors.some(s => {
+      try { return sampleEl.closest(s); } catch { return false; }
+    });
+
+    const sample = getGroupSample(group.elements);
+    const sampleText = sample.translated ? sample.text : "";
+
+    let suggestion: ScanGroup["suggestion"] = "none";
+    let reason = "";
+    let priority = 99;
+
+    if (isIgnored) {
+      suggestion = "none";
+      reason = `Ignored by config`;
+    } else if (isSelected) {
+      suggestion = "none";
+      reason = `${count} occurrences — already in content selector`;
+    } else if (count >= 15) {
+      suggestion = "content";
+      reason = `${count} occurrences — likely main content`;
+      priority = 1;
+    } else if (count >= 5) {
+      suggestion = "priority";
+      reason = `${count} occurrences — moderate frequency`;
+      priority = 50;
+    } else {
+      suggestion = "ignore";
+      reason = `Only ${count} occurrence${count > 1 ? "s" : ""} — likely nav/UI`;
+      priority = 99;
+    }
+
+    results.push({
+      selector: path,
+      count,
+      sampleText: sampleText || (sample.translated ? sample.text.slice(0, 120) : ""),
+      isSelected,
+      isIgnored,
+      reason,
+      suggestion,
+      priority,
+    });
+  }
+
+  // Sort: actionable groups first (by count desc), then already-handled groups last
+  results.sort((a, b) => {
+    const aAction = a.suggestion !== "none" ? 0 : 1;
+    const bAction = b.suggestion !== "none" ? 0 : 1;
+    return aAction - bAction || b.count - a.count;
+  });
+
+  return results;
+}
 
 // ── Helpers ───────────────────────────────────
 
@@ -257,6 +477,17 @@ async function sendToBackground(
 }
 
 // ── Bootstrap ─────────────────────────────────
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
+  const hostname = location.hostname;
+  const siteKey = "site_" + hostname;
+
+  if (changes["global_config"] || changes[siteKey]) {
+    console.log("[LLM Translator] Config changed in storage, reloading site configuration...");
+    reloadAndRetranslate().catch(console.error);
+  }
+});
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => init().catch(console.error));

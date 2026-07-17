@@ -31,6 +31,11 @@ export interface UserPrompt {
   userPrompt: string | null;
 }
 
+export interface PriorityRule {
+  selector: string;
+  priority: number; // lower = higher priority (1 = highest)
+}
+
 export interface SiteConfig {
   hostname: string;
   enabled: boolean;
@@ -44,6 +49,8 @@ export interface SiteConfig {
   selector: string;
   /** CSS selectors to ignore */
   ignore: string[];
+  /** Priority rules for translation ordering */
+  priorityRules: PriorityRule[];
 }
 
 // ── Defaults ─────────────────────────────────
@@ -71,6 +78,7 @@ export const DEFAULT_SITE_CONFIG: Omit<SiteConfig, "hostname"> = {
   observe: "body",
   selector: "",
   ignore: [],
+  priorityRules: [],
 };
 
 // ── Storage keys ─────────────────────────────

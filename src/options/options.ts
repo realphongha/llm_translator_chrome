@@ -385,6 +385,7 @@ function openSiteEditor(site: SiteConfig, globalConfig: GlobalConfig): void {
       observe: observeInput.value.trim() || "body",
       selector: selectorInput.value.trim(),
       ignore: ignoreInput.value.split(",").map(s => s.trim()).filter(Boolean),
+      priorityRules: site.priorityRules || [],
     };
     await saveSiteConfig(updated);
     editor.style.display = "none";

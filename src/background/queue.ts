@@ -24,6 +24,8 @@ export interface QueueItem {
   tabId: number;
   /** Element index within the tab (for the content script to match) */
   elementIndex: number;
+  /** Priority (lower = higher priority, Infinity = default) */
+  priority: number;
 }
 
 export interface TranslationResult {
@@ -47,6 +49,7 @@ interface TabQueue {
   items: QueueItem[];
   paused: boolean;
   processing: boolean;
+  activeItemsCount: number;
 }
 
 const tabQueues = new Map<number, TabQueue>();
@@ -80,11 +83,11 @@ function emitQueueChanged(tabId: number, count: number): void {
 
 export function enqueue(
   tabId: number,
-  items: Array<{ text: string; elementIndex: number }>
+  items: Array<{ text: string; elementIndex: number; priority?: number }>
 ): void {
   let queue = tabQueues.get(tabId);
   if (!queue) {
-    queue = { items: [], paused: false, processing: false };
+    queue = { items: [], paused: false, processing: false, activeItemsCount: 0 };
     tabQueues.set(tabId, queue);
   }
 
@@ -94,16 +97,21 @@ export function enqueue(
       text: item.text,
       tabId,
       elementIndex: item.elementIndex,
+      priority: item.priority ?? Infinity,
     });
   }
 
-  emitQueueChanged(tabId, queue.items.length);
+  // Sort: lower priority first, then by id (FIFO within same priority)
+  queue.items.sort((a, b) => a.priority - b.priority || a.id - b.id);
+
+  emitQueueChanged(tabId, queue.items.length + (queue.activeItemsCount || 0));
 }
 
 export function clearQueue(tabId: number): void {
   const queue = tabQueues.get(tabId);
   if (queue) {
     queue.items = [];
+    queue.activeItemsCount = 0;
     emitQueueChanged(tabId, 0);
   }
 }
@@ -121,7 +129,8 @@ export function resumeQueue(tabId: number): void {
 }
 
 export function getQueueCount(tabId: number): number {
-  return tabQueues.get(tabId)?.items.length ?? 0;
+  const queue = tabQueues.get(tabId);
+  return queue ? queue.items.length + (queue.activeItemsCount || 0) : 0;
 }
 
 export function isPaused(tabId: number): boolean {
@@ -132,10 +141,12 @@ export function isPaused(tabId: number): boolean {
 
 /**
  * Processes a single batch job with retry logic.
- * Returns a map of elementIndex → translation.
+ * Calls onBatchDone after each sub-batch so results can be streamed
+ * to the content script incrementally for better UX.
  */
 async function processBatch(
-  job: BatchJob
+  job: BatchJob,
+  onBatchDone?: (results: TranslationResult[]) => void
 ): Promise<TranslationResult[]> {
   const { items, systemPrompt, apiConfig, translationConfig } = job;
 
@@ -180,17 +191,63 @@ async function processBatch(
     }
 
     if (!success) {
-      // Return error results for all items in this batch
-      return batch.paragraphs.map((p) => ({
+      // Emit error results for this sub-batch immediately
+      const errorResults = batch.paragraphs.map((p) => ({
         elementIndex: p.id,
         translation: "",
         state: "error" as TranslationState,
         error: lastError?.message ?? "Unknown error",
       }));
+      onBatchDone?.(errorResults);
+      return errorResults;
+    }
+
+    // --- Emit results for this sub-batch right away (better UX) ---
+    // Only emit IDs that belong to unsplit items in this sub-batch so we
+    // don't emit partial results for a paragraph that was split across batches.
+    const batchTranslations = new Map<number, string>();
+    for (const p of batch.paragraphs) {
+      const translation = allTranslations.get(p.id);
+      if (translation !== undefined) batchTranslations.set(p.id, translation);
+    }
+
+    // Determine which original items are fully resolved by this sub-batch
+    // (i.e. their entire text was contained in a single sub-batch).
+    const resolvedItems: QueueItem[] = [];
+    for (const item of items) {
+      const splitInfo = splitMap.get(item.elementIndex);
+      if (splitInfo) {
+        // Item was split — only emit when ALL parts have been translated
+        const allPartsReady = splitInfo.partIds.every((pid) => allTranslations.has(pid));
+        if (allPartsReady) resolvedItems.push(item);
+      } else if (batchTranslations.has(item.elementIndex)) {
+        resolvedItems.push(item);
+      }
+    }
+
+    if (resolvedItems.length > 0 && onBatchDone) {
+      const partialMerged = mergeSplitTranslations(batchTranslations, splitMap);
+      const partialResults = resolvedItems.map((item) => {
+        const translation = partialMerged.get(item.elementIndex) ?? batchTranslations.get(item.elementIndex);
+        if (translation !== undefined) {
+          return {
+            elementIndex: item.elementIndex,
+            translation,
+            state: "translated" as TranslationState,
+          };
+        }
+        return {
+          elementIndex: item.elementIndex,
+          translation: "",
+          state: "error" as TranslationState,
+          error: "No translation returned for this paragraph",
+        };
+      });
+      onBatchDone(partialResults);
     }
   }
 
-  // Merge split parts
+  // Merge all split parts and build the final complete result list
   const merged = mergeSplitTranslations(allTranslations, splitMap);
 
   return items.map((item) => {
@@ -213,12 +270,16 @@ async function processBatch(
 
 /**
  * Processes items with cache lookup before API calls.
+ *
+ * @param onPartialResults - Called after each sub-batch completes so results
+ *   can be streamed to the content script immediately (better UX).
  */
 async function processWithCache(
   items: QueueItem[],
   systemPrompt: string,
   apiConfig: ApiConfig,
-  translationConfig: TranslationConfig
+  translationConfig: TranslationConfig,
+  onPartialResults?: (results: TranslationResult[]) => void
 ): Promise<TranslationResult[]> {
   const results: TranslationResult[] = [];
   const uncached: QueueItem[] = [];
@@ -237,6 +298,11 @@ async function processWithCache(
     }
   }
 
+  // Emit cache hits immediately so they appear right away
+  if (results.length > 0) {
+    onPartialResults?.(results);
+  }
+
   if (uncached.length === 0) return results;
 
   // Translate uncached items
@@ -248,14 +314,32 @@ async function processWithCache(
     retryCount: translationConfig.retryCount,
   };
 
-  const apiResults = await processBatch(job);
+  // Track which items have already been emitted by onBatchDone
+  // so we don't double-emit them in the final return.
+  const emittedIndices = new Set<number>();
 
-  // Cache successful translations
+  const apiResults = await processBatch(job, (partialResults) => {
+    // Cache and emit each sub-batch result immediately
+    for (const result of partialResults) {
+      emittedIndices.add(result.elementIndex);
+      if (result.state === "translated" && result.translation) {
+        const item = uncached.find((i) => i.elementIndex === result.elementIndex);
+        if (item) {
+          setCached(systemPrompt, apiConfig.model, item.text, result.translation).catch(() => {});
+        }
+      }
+    }
+    onPartialResults?.(partialResults);
+  });
+
+  // Cache any successful translations not yet handled by onBatchDone
   for (const result of apiResults) {
-    if (result.state === "translated" && result.translation) {
-      const item = uncached.find((i) => i.elementIndex === result.elementIndex);
-      if (item) {
-        await setCached(systemPrompt, apiConfig.model, item.text, result.translation).catch(() => {});
+    if (!emittedIndices.has(result.elementIndex)) {
+      if (result.state === "translated" && result.translation) {
+        const item = uncached.find((i) => i.elementIndex === result.elementIndex);
+        if (item) {
+          setCached(systemPrompt, apiConfig.model, item.text, result.translation).catch(() => {});
+        }
       }
     }
   }
@@ -279,6 +363,7 @@ export async function runQueue(
   if (!queue || queue.processing) return;
 
   queue.processing = true;
+  queue.activeItemsCount = 0;
 
   try {
     const parallelLimit = apiConfig.parallelCalls;
@@ -296,14 +381,28 @@ export async function runQueue(
         // but batching happens inside processWithCache)
         const chunkSize = Math.ceil(queue.items.length / Math.max(1, parallelLimit - active.length));
         const chunk = queue.items.splice(0, Math.min(chunkSize, Math.max(1, chunkSize)));
-        emitQueueChanged(tabId, queue.items.length);
+        
+        queue.activeItemsCount += chunk.length;
+        emitQueueChanged(tabId, queue.items.length + queue.activeItemsCount);
 
-        const task = processWithCache(chunk, systemPrompt, apiConfig, translationConfig)
-          .then((results) => {
-            emitResults(tabId, results);
+        const task = processWithCache(
+          chunk,
+          systemPrompt,
+          apiConfig,
+          translationConfig,
+          // Stream partial results to the content script after each sub-batch
+          (partialResults) => emitResults(tabId, partialResults)
+        )
+          .then(() => {
+            // Full results were already emitted incrementally via onPartialResults;
+            // nothing extra to emit here.
           })
           .catch((err) => {
             console.error("[LLM Translator] Queue worker error:", err);
+          })
+          .finally(() => {
+            queue.activeItemsCount = Math.max(0, queue.activeItemsCount - chunk.length);
+            emitQueueChanged(tabId, queue.items.length + queue.activeItemsCount);
           });
 
         const taskWithCleanup = task.then(() => {
@@ -320,6 +419,7 @@ export async function runQueue(
     }
   } finally {
     queue.processing = false;
+    queue.activeItemsCount = 0;
     emitQueueChanged(tabId, 0);
   }
 }

@@ -91,8 +91,43 @@
       </label>
     </div>
 
+    <!-- Selectors & Priority (collapsible) -->
+    <div id="advanced-section" class="advanced-section">
+      <button id="btn-toggle-advanced" class="advanced-toggle">
+        <svg class="advanced-toggle__arrow" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l4 3-4 3"/></svg>
+        Selectors &amp; Priority
+        <span id="rule-count" class="badge-sm">0</span>
+      </button>
+      <div id="advanced-content" class="advanced-content" style="display:none">
+        <div class="field">
+          <label class="field__label-sm">Content Selector</label>
+          <input type="text" id="adv-selector" class="input-sm" placeholder=".article p (empty = auto)" />
+        </div>
+        <div class="field">
+          <label class="field__label-sm">Ignore Selectors</label>
+          <input type="text" id="adv-ignore" class="input-sm" placeholder=".nav, .comments (comma-separated)" />
+        </div>
+
+        <div class="subsection-label">Priority Rules</div>
+        <div id="priority-rules-list"></div>
+        <button id="btn-add-rule" class="btn btn--sm btn--ghost add-rule-btn">+ Add Rule</button>
+        <p class="field__hint">Priority 1 is processed first. Items matching no rule are processed last.</p>
+
+        <button id="btn-scan" class="btn btn--sm btn--secondary scan-btn">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          Scan this page
+        </button>
+        <div id="scan-results"></div>
+      </div>
+    </div>
+
     <!-- Footer -->
-    <footer class="footer">
+    <footer class="footer" style="gap: 4px;">
+      <button id="btn-clear-cache" class="footer-btn" title="Clear translation cache">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        Clear Cache
+      </button>
+      <div style="width: 1px; height: 12px; background: var(--border); align-self: center;"></div>
       <button id="btn-settings" class="footer-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>

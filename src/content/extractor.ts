@@ -7,6 +7,9 @@
 export const ATTR_TRANSLATION_ID = "data-translation-id";
 export const ATTR_ORIGINAL = "data-original";
 export const ATTR_STATE = "data-translation-state";
+export const ATTR_PRIORITY = "data-priority";
+
+import type { PriorityRule } from "../storage/config";
 
 const SKIP_TAGS = new Set([
   "SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT", "SELECT",
@@ -18,6 +21,7 @@ export interface ExtractedNode {
   elementIndex: number;
   text: string;
   element: Element;
+  priority: number;
 }
 
 let _extractionCounter = 0;
@@ -48,6 +52,19 @@ function isInSkippedContext(node: Text, ignoreSelectors: string[]): boolean {
   return false;
 }
 
+function computePriority(el: Element, priorityRules: PriorityRule[]): number {
+  let min = Infinity;
+  for (const rule of priorityRules) {
+    try {
+      if (el.closest(rule.selector)) {
+        if (rule.priority < min) min = rule.priority;
+      }
+    } catch {
+    }
+  }
+  return min;
+}
+
 /**
  * Extracts all translatable text nodes from the root.
  *
@@ -58,11 +75,13 @@ function isInSkippedContext(node: Text, ignoreSelectors: string[]): boolean {
  * @param selector - Optional CSS selector. If provided, only text nodes
  *                   inside matching elements are extracted.
  * @param ignoreSelectors - CSS selectors for elements to ignore
+ * @param priorityRules - Rules for assigning translation priority
  */
 export function extractTranslatableNodes(
   root: Element | Document,
   selector: string,
-  ignoreSelectors: string[]
+  ignoreSelectors: string[],
+  priorityRules: PriorityRule[] = []
 ): ExtractedNode[] {
   const results: ExtractedNode[] = [];
 
@@ -99,11 +118,22 @@ export function extractTranslatableNodes(
       if (isInSkippedContext(textNode, ignoreSelectors)) continue;
 
       const idx = ++_extractionCounter;
+
+      // Compute priority from the parent element *before* replacing the text
+      // node — the parent is already in the DOM so el.closest() works correctly.
+      // A freshly-created span that hasn't been inserted yet would always return
+      // null from closest(), making every node get priority = Infinity.
+      const priority = computePriority(textNode.parentElement!, priorityRules);
+
       const span = document.createElement("span");
       span.setAttribute(ATTR_TRANSLATION_ID, String(idx));
       span.setAttribute(ATTR_ORIGINAL, raw);
       span.setAttribute(ATTR_STATE, "waiting");
       span.textContent = raw;
+
+      if (priority !== Infinity) {
+        span.setAttribute(ATTR_PRIORITY, String(priority));
+      }
 
       textNode.parentNode!.replaceChild(span, textNode);
 
@@ -111,6 +141,7 @@ export function extractTranslatableNodes(
         elementIndex: idx,
         text: raw.trim(),
         element: span,
+        priority,
       });
     }
   }

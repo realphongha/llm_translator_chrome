@@ -71,8 +71,12 @@ export interface PromptVars {
 }
 
 export function renderSystemPrompt(template: string, vars: PromptVars): string {
+  const sourceLang = vars.source_language === "Auto" || vars.source_language === "Auto Detect"
+    ? "the original language"
+    : vars.source_language;
+
   return template
-    .replace(/\{\{source_language\}\}/g, vars.source_language)
+    .replace(/\{\{source_language\}\}/g, sourceLang)
     .replace(/\{\{target_language\}\}/g, vars.target_language)
     .replace(/\{\{hostname\}\}/g, vars.hostname ?? "")
     .replace(/\{\{url\}\}/g, vars.url ?? "")
