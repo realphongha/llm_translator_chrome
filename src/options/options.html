@@ -279,9 +279,19 @@ Use {{source_language}} and {{target_language}} as variables."></textarea>
             <span class="cache-stat__label">Cached Entries</span>
             <span id="cache-count" class="cache-stat__value">—</span>
           </div>
+          <div class="cache-stat">
+            <span class="cache-stat__label">Storage Used</span>
+            <span id="cache-bytes" class="cache-stat__value">—</span>
+          </div>
+          <div class="field" style="margin-top:4px">
+            <label class="field__label" for="cache-max-mb">Max Cache Size (MB)</label>
+            <input type="number" id="cache-max-mb" class="input" min="1" max="100" value="7" />
+            <p class="field__hint">Cache older than this limit gets evicted (LRU). Default: 7 MB.</p>
+          </div>
         </div>
 
         <div class="actions-bar">
+          <button id="btn-save-cache" class="btn btn--primary">Save Cache Settings</button>
           <button id="btn-clear-cache" class="btn btn--danger">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
             Clear Cache

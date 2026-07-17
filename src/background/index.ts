@@ -20,7 +20,7 @@ import {
   onResults,
   onQueueChanged,
 } from "./queue";
-import { clearCache, getCacheStats } from "./cache";
+import { clearCache, getCacheStats, initCache } from "./cache";
 import { testApiConnection } from "./api";
 
 // ── Message types ─────────────────────────────
@@ -97,6 +97,7 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
 
   try {
     const globalConfig = await loadGlobalConfig();
+    initCache(globalConfig.cache.maxMb);
 
     if (!globalConfig.api.base || !globalConfig.api.model) {
       const err = "API not configured. Please open Settings.";

@@ -451,26 +451,57 @@ function populateSelectFromList(sel: HTMLSelectElement, options: string[], curre
 
 // ── Cache Section ─────────────────────────────
 
-async function initCacheSection(): Promise<void> {
+async function initCacheSection(config: GlobalConfig): Promise<void> {
   const cacheCount = document.getElementById("cache-count")!;
+  const cacheBytes = document.getElementById("cache-bytes")!;
+  const cacheMaxMb = document.getElementById("cache-max-mb") as HTMLInputElement;
+  const btnSave = document.getElementById("btn-save-cache")!;
   const btnClear = document.getElementById("btn-clear-cache")!;
   const result = document.getElementById("cache-action-result")!;
 
-  // Load stats
-  const res = await sendToBackground({ type: "GET_CACHE_STATS" }) as {
-    ok: boolean;
-    data?: { count: number };
-  };
-  cacheCount.textContent = res.ok ? String(res.data?.count ?? 0) : "—";
+  cacheMaxMb.value = String(config.cache.maxMb);
+
+  async function loadStats(): Promise<void> {
+    const res = await sendToBackground({ type: "GET_CACHE_STATS" }) as {
+      ok: boolean;
+      data?: { count: number; bytes: number };
+    };
+    if (res.ok && res.data) {
+      cacheCount.textContent = String(res.data.count);
+      cacheBytes.textContent = formatBytes(res.data.bytes);
+    } else {
+      cacheCount.textContent = "—";
+      cacheBytes.textContent = "—";
+    }
+  }
+
+  await loadStats();
+
+  btnSave.addEventListener("click", async () => {
+    const cfg = await loadGlobalConfig();
+    cfg.cache = {
+      maxMb: parseInt(cacheMaxMb.value) || 7,
+    };
+    await saveGlobalConfig(cfg);
+    showToast("Cache settings saved!");
+  });
 
   btnClear.addEventListener("click", async () => {
     if (!confirm("Clear all cached translations?")) return;
     await sendToBackground({ type: "CLEAR_CACHE" });
-    cacheCount.textContent = "0";
+    await loadStats();
     result.textContent = "Cache cleared.";
     setTimeout(() => result.textContent = "", 2000);
     showToast("Cache cleared.");
   });
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const val = bytes / Math.pow(1024, i);
+  return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
 // ── Utilities ─────────────────────────────────
@@ -504,7 +535,7 @@ async function init(): Promise<void> {
     initTranslationSection(config),
     initPromptsSection(config),
     initSitesSection(config),
-    initCacheSection(),
+    initCacheSection(config),
   ]);
 }
 

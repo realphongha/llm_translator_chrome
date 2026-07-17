@@ -22,9 +22,14 @@ export interface TranslationConfig {
   retryCount: number;
 }
 
+export interface CacheConfig {
+  maxMb: number;
+}
+
 export interface GlobalConfig {
   api: ApiConfig;
   translation: TranslationConfig;
+  cache: CacheConfig;
   /** Custom user-created prompts keyed by id */
   userPrompts: Record<string, UserPrompt>;
 }
@@ -74,6 +79,9 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
     maxChars: 4000,
     retryCount: 3,
   },
+  cache: {
+    maxMb: 7,
+  },
   userPrompts: {},
 };
 
@@ -103,6 +111,7 @@ export async function loadGlobalConfig(): Promise<GlobalConfig> {
   return {
     api: { ...DEFAULT_GLOBAL_CONFIG.api, ...stored.api },
     translation: { ...DEFAULT_GLOBAL_CONFIG.translation, ...stored.translation },
+    cache: { ...DEFAULT_GLOBAL_CONFIG.cache, ...stored.cache },
     userPrompts: stored.userPrompts ?? {},
   };
 }
