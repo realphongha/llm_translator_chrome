@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Translator — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sidebar__header">
+        <svg class="sidebar__icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 5h12M9 3v2M7.5 20.5L12 12l4.5 8.5M6 16h5.5M16 4l2 2m0 0l2 2m-2-2l-2 2m2-2l2-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div>
+          <div class="sidebar__title">LLM Translator</div>
+          <div class="sidebar__subtitle">Settings v0.1.0</div>
+        </div>
+      </div>
+
+      <ul class="nav-list">
+        <li><a href="#api" class="nav-item nav-item--active" data-section="api">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          API
+        </a></li>
+        <li><a href="#translation" class="nav-item" data-section="translation">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h12M9 3v2M7.5 20.5L12 12l4.5 8.5M6 16h5.5M16 4l2 2m0 0l2 2m-2-2l-2 2m2-2l2-2"/></svg>
+          Translation
+        </a></li>
+        <li><a href="#prompts" class="nav-item" data-section="prompts">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Prompts
+        </a></li>
+        <li><a href="#sites" class="nav-item" data-section="sites">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Site Profiles
+        </a></li>
+        <li><a href="#cache" class="nav-item" data-section="cache">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Cache
+        </a></li>
+      </ul>
+    </nav>
+
+    <!-- Main content -->
+    <main class="main">
+
+      <!-- ── API Section ── -->
+      <section id="api" class="section section--active">
+        <div class="section__header">
+          <h1 class="section__title">API Configuration</h1>
+          <p class="section__desc">Connect to any OpenAI-compatible endpoint — local or cloud.</p>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field__label" for="api-base">API Base URL</label>
+            <input type="url" id="api-base" class="input" placeholder="http://localhost:8080/v1" />
+            <p class="field__hint">Examples: <code>http://localhost:11434/v1</code> (Ollama), <code>https://openrouter.ai/api/v1</code></p>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="api-key">API Key</label>
+            <div class="input-group">
+              <input type="password" id="api-key" class="input" placeholder="sk-... (leave empty for local)" />
+              <button id="btn-toggle-key" class="input-addon" title="Show/hide key">
+                <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field__label" for="api-model">Model</label>
+            <input type="text" id="api-model" class="input" placeholder="llama3, gpt-4o-mini, deepseek-v2..." />
+          </div>
+
+          <div class="field-row">
+            <div class="field field--half">
+              <label class="field__label" for="api-parallel">Parallel Calls</label>
+              <input type="number" id="api-parallel" class="input" min="1" max="32" value="8" />
+              <p class="field__hint">Max concurrent API requests</p>
+            </div>
+            <div class="field field--half">
+              <label class="field__label" for="api-timeout">Timeout (seconds)</label>
+              <input type="number" id="api-timeout" class="input" min="5" max="300" value="60" />
+            </div>
+          </div>
+        </div>
+
+        <div class="actions-bar">
+          <button id="btn-test-api" class="btn btn--secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Test Connection
+          </button>
+          <div id="test-result" class="test-result"></div>
+          <button id="btn-save-api" class="btn btn--primary">
+            Save API Settings
+          </button>
+        </div>
+      </section>
+
+      <!-- ── Translation Section ── -->
+      <section id="translation" class="section">
+        <div class="section__header">
+          <h1 class="section__title">Translation Settings</h1>
+          <p class="section__desc">Control batch size and retry behavior.</p>
+        </div>
+
+        <div class="card">
+          <div class="field">
+            <label class="field__label" for="max-chars">Max Characters Per Request</label>
+            <input type="number" id="max-chars" class="input" min="500" max="50000" value="4000" />
+            <p class="field__hint">Multiple paragraphs are batched until this limit is reached.</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="retry-count">Retry Count</label>
+            <input type="number" id="retry-count" class="input" min="0" max="10" value="3" />
+            <p class="field__hint">Number of retry attempts on failed requests.</p>
+          </div>
+        </div>
+
+        <div class="actions-bar">
+          <button id="btn-save-translation" class="btn btn--primary">Save Translation Settings</button>
+        </div>
+      </section>
+
+      <!-- ── Prompts Section ── -->
+      <section id="prompts" class="section">
+        <div class="section__header">
+          <h1 class="section__title">Prompts</h1>
+          <p class="section__desc">Manage built-in and custom system prompts.</p>
+        </div>
+
+        <!-- Built-in prompts -->
+        <h2 class="subsection-title">Built-in Prompts</h2>
+        <div id="builtin-prompts-list" class="prompts-list"></div>
+
+        <!-- User prompts -->
+        <div class="subsection-header">
+          <h2 class="subsection-title">Custom Prompts</h2>
+          <button id="btn-new-prompt" class="btn btn--sm btn--primary">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Prompt
+          </button>
+        </div>
+        <div id="user-prompts-list" class="prompts-list">
+          <div class="empty-state">No custom prompts yet. Create one above.</div>
+        </div>
+
+        <!-- Prompt editor modal -->
+        <div id="prompt-editor" class="editor-panel" style="display:none">
+          <div class="editor-panel__header">
+            <input type="text" id="prompt-name" class="input editor-name" placeholder="Prompt name..." />
+            <div class="editor-panel__actions">
+              <button id="btn-save-prompt" class="btn btn--sm btn--primary">Save</button>
+              <button id="btn-cancel-prompt" class="btn btn--sm btn--ghost">Cancel</button>
+            </div>
+          </div>
+          <textarea id="prompt-body" class="textarea" rows="14" placeholder="Enter system prompt...
+Use {{source_language}} and {{target_language}} as variables."></textarea>
+          <input type="hidden" id="prompt-editing-id" />
+        </div>
+      </section>
+
+      <!-- ── Site Profiles Section ── -->
+      <section id="sites" class="section">
+        <div class="section__header">
+          <h1 class="section__title">Site Profiles</h1>
+          <p class="section__desc">Per-site translation rules and selectors.</p>
+        </div>
+
+        <div id="sites-list" class="sites-list">
+          <div class="empty-state">No site profiles yet. Visit any webpage to auto-create one.</div>
+        </div>
+
+        <!-- Site editor -->
+        <div id="site-editor" class="editor-panel" style="display:none">
+          <div class="editor-panel__header">
+            <span class="editor-hostname" id="editing-hostname"></span>
+            <div class="editor-panel__actions">
+              <button id="btn-save-site" class="btn btn--sm btn--primary">Save</button>
+              <button id="btn-cancel-site" class="btn btn--sm btn--ghost">Cancel</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="field">
+              <label class="field__label">
+                <input type="checkbox" id="site-edit-enabled" /> Enable translation
+              </label>
+            </div>
+            <div class="field">
+              <label class="field__label" for="site-edit-prompt">System Prompt</label>
+              <select id="site-edit-prompt" class="select"></select>
+            </div>
+            <div class="field-row">
+              <div class="field field--half">
+                <label class="field__label" for="site-edit-source">Source Language</label>
+                <select id="site-edit-source" class="select"></select>
+              </div>
+              <div class="field field--half">
+                <label class="field__label" for="site-edit-target">Target Language</label>
+                <select id="site-edit-target" class="select"></select>
+              </div>
+            </div>
+            <div class="field">
+              <label class="field__label" for="site-edit-observe">Observe Selector</label>
+              <input type="text" id="site-edit-observe" class="input" placeholder=".article, body" />
+              <p class="field__hint">CSS selector for the container to observe for new content.</p>
+            </div>
+            <div class="field">
+              <label class="field__label" for="site-edit-selector">Content Selector</label>
+              <input type="text" id="site-edit-selector" class="input" placeholder=".article p (leave empty for auto)" />
+              <p class="field__hint">CSS selector for translatable paragraphs. Leave empty for smart auto-detection.</p>
+            </div>
+            <div class="field">
+              <label class="field__label" for="site-edit-ignore">Ignore Selectors</label>
+              <input type="text" id="site-edit-ignore" class="input" placeholder=".ads, .comments (comma-separated)" />
+            </div>
+          </div>
+
+          <div class="actions-bar">
+            <button id="btn-delete-site" class="btn btn--danger btn--sm">Delete Profile</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Cache Section ── -->
+      <section id="cache" class="section">
+        <div class="section__header">
+          <h1 class="section__title">Translation Cache</h1>
+          <p class="section__desc">Cached translations avoid duplicate API calls when revisiting pages.</p>
+        </div>
+
+        <div class="card">
+          <div class="cache-stat">
+            <span class="cache-stat__label">Cached Entries</span>
+            <span id="cache-count" class="cache-stat__value">—</span>
+          </div>
+        </div>
+
+        <div class="actions-bar">
+          <button id="btn-clear-cache" class="btn btn--danger">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+            Clear Cache
+          </button>
+          <span id="cache-action-result" class="action-result"></span>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="alert" aria-live="polite"></div>
+  <script src="options.js"></script>
+</body>
+</html>
