@@ -9,8 +9,9 @@
     "clean": "node -e \"const fs=require('fs');const rm=(p)=>{if(fs.existsSync(p)){fs.rmSync(p,{recursive:true})}};rm('dist');\""
   },
   "devDependencies": {
+    "@types/chrome": "^0.0.270",
     "esbuild": "^0.21.5",
-    "typescript": "^5.5.4",
-    "@types/chrome": "^0.0.270"
+    "sharp": "^0.35.3",
+    "typescript": "^5.5.4"
   }
 }

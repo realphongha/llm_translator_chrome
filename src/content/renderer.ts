@@ -26,22 +26,59 @@ export function markTranslating(el: Element): void {
  */
 export function applyTranslation(result: TranslationResult): void {
   const el = findElementByIndex(result.elementIndex);
-  if (!el) return;
+  if (!el) {
+    console.warn(`[LLM Translator] Element #${result.elementIndex} not found in DOM — result dropped`);
+    return;
+  }
 
-  if (result.state === "translated" && result.translation) {
-    // Save original before first translation
-    if (!el.hasAttribute(ATTR_ORIGINAL)) {
-      el.setAttribute(ATTR_ORIGINAL, el.textContent ?? "");
-    }
+  if (result.state === "translated") {
+    const text = result.translation || el.getAttribute(ATTR_ORIGINAL);
+    if (text == null) return;
 
-    // Replace text content
-    el.textContent = result.translation;
+    el.textContent = text;
     el.setAttribute(ATTR_STATE, "translated");
     ensureStateIndicator(el, "translated");
   } else if (result.state === "error") {
     el.setAttribute(ATTR_STATE, "error");
     ensureStateIndicator(el, "error");
   }
+}
+
+/**
+ * Reverts a stuck translating element back to its original text node,
+ * removing all translation-related attributes and the spinner.
+ */
+export function revertTranslatingElement(el: Element): void {
+  el.querySelector(".llt-state")?.remove();
+
+  // Use data-original (captured before any spinner existed).
+  // Sanitize trailing spinner character that previous buggy versions
+  // may have baked into the attribute.
+  const text = (el.getAttribute(ATTR_ORIGINAL) ?? el.textContent ?? "").replace(/ ⟳$/, "");
+
+  el.removeAttribute(ATTR_TRANSLATION_ID);
+  el.removeAttribute(ATTR_ORIGINAL);
+  el.removeAttribute(ATTR_STATE);
+
+  const textNode = document.createTextNode(text);
+  el.parentNode?.replaceChild(textNode, el);
+}
+
+/**
+ * Scans the DOM for any elements still stuck in "translating" state
+ * and reverts them. Called as a safety net when the queue is empty
+ * and no results are pending.
+ */
+/** Returns the number of reverted elements. */
+export function revertStuckElements(): number {
+  const selector = `[${ATTR_STATE}="translating"]`;
+  const stuck = document.querySelectorAll(selector);
+  for (const el of stuck) {
+    const id = el.getAttribute(ATTR_TRANSLATION_ID);
+    console.warn(`[LLM Translator] Cleanup: reverting stuck element #${id}`);
+    revertTranslatingElement(el);
+  }
+  return stuck.length;
 }
 
 /**
