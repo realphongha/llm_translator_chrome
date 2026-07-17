@@ -9,7 +9,7 @@ type SitePreset = Omit<SiteConfig, "hostname">;
 
 const SITE_PRESETS: Record<string, SitePreset> = {
   "qidian.com": {
-    enabled: true,
+    enabled: false,
     prompt: "qidian-vn",
     sourceLanguage: "Chinese (Simplified)",
     targetLanguage: "Vietnamese",
@@ -18,7 +18,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     ignore: [".comment-wrap", ".ads-area", ".qd_GamePlatform"],
   },
   "m.qidian.com": {
-    enabled: true,
+    enabled: false,
     prompt: "qidian-vn",
     sourceLanguage: "Chinese (Simplified)",
     targetLanguage: "Vietnamese",
@@ -47,7 +47,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
 };
 
 const DEFAULT_PRESET: SitePreset = {
-  enabled: true,
+  enabled: false,
   prompt: "general",
   sourceLanguage: "Auto",
   targetLanguage: "English",

@@ -132,7 +132,7 @@ function populateLanguageSelects(
   for (const lang of SOURCE_LANGUAGES) {
     const opt = document.createElement("option");
     opt.value = lang.name;
-    opt.textContent = lang.name === "Auto Detect" ? "Auto" : lang.name.split(" ")[0];
+    opt.textContent = lang.name === "Auto Detect" ? "Auto" : lang.name;
     opt.selected = lang.name === currentSource || lang.code === currentSource;
     sourceLang.appendChild(opt);
   }
@@ -142,7 +142,7 @@ function populateLanguageSelects(
   for (const lang of TARGET_LANGUAGES) {
     const opt = document.createElement("option");
     opt.value = lang.name;
-    opt.textContent = lang.name.split(" ")[0];
+    opt.textContent = lang.name;
     opt.selected = lang.name === currentTarget || lang.code === currentTarget;
     targetLang.appendChild(opt);
   }

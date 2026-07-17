@@ -64,7 +64,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
 };
 
 export const DEFAULT_SITE_CONFIG: Omit<SiteConfig, "hostname"> = {
-  enabled: true,
+  enabled: false,
   prompt: "general",
   sourceLanguage: "Auto",
   targetLanguage: "English",
