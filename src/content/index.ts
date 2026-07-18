@@ -14,7 +14,7 @@ import {
   ATTR_STATE,
   ATTR_PRIORITY,
 } from "./extractor";
-import { applyTranslations, applyTranslation, injectStyles, markElementsTranslating, revertTranslatingElement, toggleOriginal } from "./renderer";
+import { applyTranslations, applyTranslation, injectStyles, markElementsTranslating, revertTranslatingElement, toggleOriginal, toggleAllOriginal } from "./renderer";
 import type { SiteConfig, PriorityRule } from "../storage/config";
 import type { TranslationResult } from "../background/queue";
 
@@ -43,7 +43,14 @@ async function reloadAndRetranslate(): Promise<void> {
     restoreOriginals();
     clearTranslationMemory();
     pendingIndices.clear();
-    await init();
+    // Rebuild config/observer/bar without auto-translating, then force a fresh
+    // (cache-bypassing) full translation regardless of mode. Retranslate is an
+    // explicit user action, so the on/auto load-time distinction no longer applies.
+    await init(false);
+    if (mode !== "off") {
+      await translateAll(true);
+      observer?.start();
+    }
   } finally {
     isReloading = false;
   }
@@ -51,7 +58,7 @@ async function reloadAndRetranslate(): Promise<void> {
 
 // ── Init ──────────────────────────────────────
 
-async function init(): Promise<void> {
+async function init(autoTranslate = true): Promise<void> {
   injectStyles();
 
   // Wait a small moment (300ms) to let client-side frameworks (React, Vue, etc.)
@@ -95,7 +102,7 @@ async function init(): Promise<void> {
   // Show the floating control bar for both "on" and "auto" modes.
   showFloatingBar();
 
-  if (mode === "auto") {
+  if (mode === "auto" && autoTranslate) {
     // Auto-translate on load (current behavior) and observe dynamic content.
     await translateAll();
     observer.start();
@@ -109,7 +116,7 @@ async function init(): Promise<void> {
  * Used for the initial auto-translate (auto mode) and the manual "Translate"
  * button (on mode).
  */
-async function translateAll(): Promise<void> {
+async function translateAll(skipCache = false): Promise<void> {
   if (!siteConfig) return;
   const allNodes = extractTranslatableNodes(
     document,
@@ -122,7 +129,7 @@ async function translateAll(): Promise<void> {
   // nodes to sort and prioritize. Streaming to the user is handled incrementally
   // by the background script after each sub-batch completion.
   if (allNodes.length > 0) {
-    await enqueueNodes(allNodes);
+    await enqueueNodes(allNodes, skipCache);
   }
 }
 
@@ -159,8 +166,17 @@ function showFloatingBar(): void {
     reloadAndRetranslate().catch(console.error);
   });
 
+  const toggleBtn = document.createElement("button");
+  toggleBtn.textContent = "Show Original";
+  toggleBtn.style.cssText = btnStyle + "background:#4a5160;";
+  toggleBtn.addEventListener("click", () => {
+    const showingOriginal = toggleAllOriginal();
+    toggleBtn.textContent = showingOriginal ? "Show Translated" : "Show Original";
+  });
+
   bar.appendChild(translateBtn);
   bar.appendChild(retranslateBtn);
+  bar.appendChild(toggleBtn);
   document.body.appendChild(bar);
   floatingBar = bar;
 }
@@ -199,7 +215,8 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
 }
 
 async function enqueueNodes(
-  nodes: ReturnType<typeof extractTranslatableNodes>
+  nodes: ReturnType<typeof extractTranslatableNodes>,
+  skipCache = false
 ): Promise<void> {
   if (nodes.length === 0) return;
 
@@ -212,6 +229,7 @@ async function enqueueNodes(
     text: n.text,
     elementIndex: n.elementIndex,
     priority: n.priority !== Infinity ? n.priority : undefined,
+    ...(skipCache ? { skipCache: true } : {}),
   }));
 
   // Track pending so cleanup doesn't fire prematurely

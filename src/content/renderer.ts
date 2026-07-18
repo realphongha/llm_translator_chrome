@@ -123,6 +123,46 @@ export function toggleOriginal(index: number): boolean {
 }
 
 /**
+ * Page-wide toggle between original (source) and translated text for all
+ * translated elements. Non-destructive: current text is stashed in
+ * data-translated when showing original, and restored on toggle back. No LLM
+ * calls are made.
+ *
+ * @returns true if the page is now showing ORIGINAL text, false if showing
+ *          translated text.
+ */
+export function toggleAllOriginal(): boolean {
+  const els = document.querySelectorAll(
+    `[${ATTR_TRANSLATION_ID}][${ATTR_ORIGINAL}]`
+  );
+  // Determine current state: if any element is currently showing original,
+  // treat the page as "showing original" and toggle everything back.
+  const showingOriginal = document.querySelector('[data-showing-original="true"]') !== null;
+
+  for (const el of els) {
+    const original = el.getAttribute(ATTR_ORIGINAL);
+    if (original == null) continue;
+
+    if (showingOriginal) {
+      const translated = el.getAttribute("data-translated");
+      if (translated != null) el.textContent = translated;
+      el.removeAttribute("data-translated");
+      el.removeAttribute("data-showing-original");
+      el.setAttribute(ATTR_STATE, "translated");
+    } else {
+      const current = el.textContent || "";
+      if (current === original) continue; // nothing to swap
+      el.setAttribute("data-translated", current);
+      el.textContent = original;
+      el.setAttribute("data-showing-original", "true");
+      el.setAttribute(ATTR_STATE, "waiting");
+    }
+  }
+
+  return !showingOriginal;
+}
+
+/**
  * Applies a batch of translation results.
  */
 export function applyTranslations(results: TranslationResult[]): void {
