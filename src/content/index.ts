@@ -9,9 +9,10 @@ import {
   isTranslated,
   ATTR_TRANSLATION_ID,
   ATTR_ORIGINAL,
+  ATTR_STATE,
   ATTR_PRIORITY,
 } from "./extractor";
-import { applyTranslations, injectStyles, markElementsTranslating, revertTranslatingElement, revertStuckElements, toggleOriginal } from "./renderer";
+import { applyTranslations, injectStyles, markElementsTranslating, revertTranslatingElement, toggleOriginal } from "./renderer";
 import type { SiteConfig, PriorityRule } from "../storage/config";
 import type { TranslationResult } from "../background/queue";
 
@@ -181,17 +182,32 @@ function scheduleCleanup(): void {
         pendingIndices.delete(idx);
       }
     }
-    const reverted = revertStuckElements();
-    // Re-enqueue the reverted text nodes so they get another chance
-    if (reverted > 0 && siteConfig) {
-      console.log(`[LLM Translator] Re-enqueuing ${reverted} stuck items`);
-      const nodes = extractTranslatableNodes(
-        document,
-        siteConfig.selector || "",
-        siteConfig.ignore || [],
-        siteConfig.priorityRules || []
-      );
+    // Re-enqueue only elements still stuck in "translating" state. These
+    // retain a valid data-original (the true source text), so we can safely
+    // retry them. We deliberately do NOT re-walk the whole document here:
+    // doing so would re-capture already-translated text (e.g. Vietnamese left
+    // behind after a framework like Vue re-rendered a paragraph and dropped
+    // our wrapper) and store it as a bogus data-original.
+    const stuck = document.querySelectorAll(`[${ATTR_STATE}="translating"]`);
+    if (stuck.length > 0 && siteConfig) {
+      const nodes: ReturnType<typeof extractTranslatableNodes> = [];
+      for (const el of stuck) {
+        const idxAttr = el.getAttribute(ATTR_TRANSLATION_ID);
+        if (!idxAttr) continue;
+        const idx = parseInt(idxAttr, 10);
+        const original = (el.getAttribute(ATTR_ORIGINAL) ?? "").trim();
+        if (!original) continue;
+        nodes.push({
+          elementIndex: idx,
+          text: original,
+          element: el,
+          priority: el.hasAttribute(ATTR_PRIORITY)
+            ? parseInt(el.getAttribute(ATTR_PRIORITY)!, 10)
+            : Infinity,
+        });
+      }
       if (nodes.length > 0) {
+        console.log(`[LLM Translator] Re-enqueuing ${nodes.length} stuck items`);
         enqueueNodes(nodes);
       }
     }
