@@ -27,7 +27,6 @@ export function markTranslating(el: Element): void {
 export function applyTranslation(result: TranslationResult): void {
   const el = findElementByIndex(result.elementIndex);
   if (!el) {
-    console.warn(`[LLM Translator] Element #${result.elementIndex} not found in DOM — result dropped`);
     return;
   }
 

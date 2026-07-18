@@ -8,6 +8,7 @@ export interface ApiConfig {
   key: string;
   model: string;
   parallelCalls: number;
+  chunkSize: number;
   timeout: number; // seconds
   temperature?: number;
   top_p?: number;
@@ -71,7 +72,8 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
     base: "",
     key: "",
     model: "",
-    parallelCalls: 32,
+    parallelCalls: 8,
+    chunkSize: 8,
     timeout: 60,
     temperature: 0.1,
   },

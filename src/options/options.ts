@@ -64,6 +64,7 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   const apiKey = document.getElementById("api-key") as HTMLInputElement;
   const apiModel = document.getElementById("api-model") as HTMLInputElement;
   const apiParallel = document.getElementById("api-parallel") as HTMLInputElement;
+  const apiChunkSize = document.getElementById("api-chunk-size") as HTMLInputElement;
   const apiTimeout = document.getElementById("api-timeout") as HTMLInputElement;
   const apiTemperature = document.getElementById("api-temperature") as HTMLInputElement;
   const apiTopP = document.getElementById("api-top-p") as HTMLInputElement;
@@ -81,6 +82,7 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   apiKey.value = config.api.key;
   apiModel.value = config.api.model;
   apiParallel.value = String(config.api.parallelCalls);
+  apiChunkSize.value = String(config.api.chunkSize);
   apiTimeout.value = String(config.api.timeout);
   if (config.api.temperature !== undefined) apiTemperature.value = String(config.api.temperature);
   if (config.api.top_p !== undefined) apiTopP.value = String(config.api.top_p);
@@ -101,7 +103,8 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
       base: apiBase.value.trim(),
       key: apiKey.value.trim(),
       model: apiModel.value.trim(),
-      parallelCalls: parseInt(apiParallel.value) || 32,
+      parallelCalls: parseInt(apiParallel.value) || 8,
+      chunkSize: parseInt(apiChunkSize.value) || 8,
       timeout: parseInt(apiTimeout.value) || 60,
       temperature: apiTemperature.value ? parseFloat(apiTemperature.value) : undefined,
       top_p: apiTopP.value ? parseFloat(apiTopP.value) : undefined,

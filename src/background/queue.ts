@@ -367,6 +367,7 @@ export async function runQueue(
 
   try {
     const parallelLimit = apiConfig.parallelCalls;
+    const maxChunk = apiConfig.chunkSize;
     const active: Promise<void>[] = [];
 
     while (queue.items.length > 0 || active.length > 0) {
@@ -377,10 +378,13 @@ export async function runQueue(
 
       // Fill up to parallel limit
       while (queue.items.length > 0 && active.length < parallelLimit) {
-        // Take a chunk of items (one per worker to maximize parallelism,
-        // but batching happens inside processWithCache)
-        const chunkSize = Math.ceil(queue.items.length / Math.max(1, parallelLimit - active.length));
-        const chunk = queue.items.splice(0, Math.min(chunkSize, Math.max(1, chunkSize)));
+        // Take a chunk of items, capped at chunkSize so each worker only
+        // sends a small batch — results trickle in as workers finish
+        const chunkSize = Math.min(
+          Math.ceil(queue.items.length / Math.max(1, parallelLimit - active.length)),
+          maxChunk
+        );
+        const chunk = queue.items.splice(0, Math.max(1, chunkSize));
         
         queue.activeItemsCount += chunk.length;
         emitQueueChanged(tabId, queue.items.length + queue.activeItemsCount);

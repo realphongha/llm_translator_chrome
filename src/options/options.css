@@ -189,6 +189,11 @@ html, body {
   flex: 1;
 }
 
+.field--third {
+  flex: 1;
+  min-width: 0;
+}
+
 .field-row {
   display: flex;
   gap: 16px;
@@ -495,8 +500,7 @@ html, body {
   padding: 6px 8px;
   margin-top: 8px;
   white-space: pre-wrap;
-  overflow: hidden;
-  max-height: 60px;
+  overflow-y: auto;
   position: relative;
 }
 
