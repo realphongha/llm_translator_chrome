@@ -72,7 +72,11 @@ Removes the `dist/` directory.
 ### Per-Site Configuration
 - Auto-created on first visit with sensible defaults
 - Built-in presets: qidian.com, m.qidian.com, novelupdates.com, fanyi.baidu.com
-- Each site: enabled/disabled, prompt, language pair, observe selector, content selector, ignore selectors, priority rules
+- Each site: **mode** (`off` / `on` / `auto`), prompt, language pair, observe selector, content selector, ignore selectors, priority rules
+- Mode controls behavior:
+  - `off` — extension does nothing on this site
+  - `on` — manual mode: shows the floating control bar, no auto-translate on load. Click **Translate** to translate, then the observer starts so lazily-loaded content auto-translates
+  - `auto` — auto-translates on load and observes dynamic (SPA) content
 - Priority rules: CSS selector → priority number, matched via `el.closest()`
 
 ### Translation Cache
@@ -80,6 +84,31 @@ Removes the `dist/` directory.
 - True LRU eviction (reads update recency order)
 - Dual eviction: hard count cap (10,000 entries) + byte-based cap (default 7MB, configurable 1-100MB)
 - Cache hits emit immediately before API calls
+- **Retranslate explicitly bypasses the cache** to request a fresh translation from the model
+
+### In-Session Translation Memory
+- When a translation is applied, the mapping `translated text → original text` is recorded in an in-session memory map
+- On a framework re-render (e.g. Vue/React) that drops the extension's wrapper span, already-translated text is recognized and re-attached with the correct `data-original` instead of being re-sent to the model as new source
+- Prevents the "data-original captures translated text" corruption bug on SPA sites
+- Cleared on a full Retranslate / reload
+
+### Manual Translation
+- Per-paragraph "Translate Manually" action lets you supply your own translation via a prompt
+- Manual translations are cached with the same key as model results, so they persist like a normal LLM translation
+
+### Floating Control Bar
+- Shown for `on` and `auto` modes (top-right of the page), icon-only buttons with hover tooltips:
+  - 🌐 **Translate** — translate the whole page (manual trigger; starts the observer)
+  - ↻ **Retranslate** — restore originals and re-translate everything with a *fresh* model call (ignores cache)
+  - ⇄ **Show Original / Show Translated** — reversible, non-destructive toggle: swaps every paragraph between source and translated text without any API call
+- Per-paragraph toolbar (hover a paragraph) also offers: toggle original, retranslate, retranslate with comment, translate manually
+
+### Per-Paragraph Controls
+- Hovering a translated paragraph reveals a small toolbar:
+  - ⇄ Toggle Original / Translated
+  - ↻ Retranslate
+  - ✎ Retranslate with Comment (supply a reviewer instruction via prompt)
+  - ✍ Translate Manually (supply your own translation)
 
 ### Built-in Prompts
 - **General** — General-purpose for any language pair
@@ -172,7 +201,7 @@ All settings stored in `chrome.storage.local`, no backend server or account syst
 
 | Field | Default | Description |
 |---|---|---|
-| Enabled | `false` | Translation on/off |
+| Mode | `"off"` | `off` / `on` / `auto` — see Per-Site Configuration |
 | Prompt | `"general"` | System prompt ID |
 | Source Language | `"Auto"` | Source language |
 | Target Language | `"English"` | Target language |
@@ -206,6 +235,8 @@ Content Script
   │
   ├─ Apply translations to DOM
   ├─ Update state indicators (⟳ translating / ✓ translated / ⚠ error)
+  ├─ In-session translation memory (re-attach re-rendered translated text)
+  ├─ Floating control bar (Translate / Retranslate / Show Original)
   └─ Schedule cleanup when queue empties (2s)
 ```
 
