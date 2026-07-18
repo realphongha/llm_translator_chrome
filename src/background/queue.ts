@@ -26,6 +26,10 @@ export interface QueueItem {
   elementIndex: number;
   /** Priority (lower = higher priority, Infinity = default) */
   priority: number;
+  /** Optional review instruction appended to the user prompt for retranslate */
+  instruction?: string;
+  /** If true, skip cache lookup and always call the API */
+  skipCache?: boolean;
 }
 
 export interface TranslationResult {
@@ -83,7 +87,7 @@ function emitQueueChanged(tabId: number, count: number): void {
 
 export function enqueue(
   tabId: number,
-  items: Array<{ text: string; elementIndex: number; priority?: number }>
+  items: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean }>
 ): void {
   let queue = tabQueues.get(tabId);
   if (!queue) {
@@ -98,6 +102,8 @@ export function enqueue(
       tabId,
       elementIndex: item.elementIndex,
       priority: item.priority ?? Infinity,
+      instruction: item.instruction,
+      skipCache: item.skipCache,
     });
   }
 
@@ -152,7 +158,7 @@ async function processBatch(
 
   const paragraphs = items.map((item) => ({
     id: item.elementIndex,
-    text: item.text,
+    text: item.instruction ? `${item.text}\n\n${item.instruction}` : item.text,
   }));
 
   const { batches, splitMap } = buildBatches(paragraphs, translationConfig.maxChars);
@@ -284,8 +290,12 @@ async function processWithCache(
   const results: TranslationResult[] = [];
   const uncached: QueueItem[] = [];
 
-  // Check cache for each item
+  // Check cache for each item (skip if skipCache is set, e.g. retranslate)
   for (const item of items) {
+    if (item.skipCache) {
+      uncached.push(item);
+      continue;
+    }
     const cached = await getCached(systemPrompt, apiConfig.model, item.text);
     if (cached !== null) {
       results.push({

@@ -81,6 +81,41 @@ export function revertStuckElements(): number {
 }
 
 /**
+ * Toggles between the translated text and original text for an element.
+ * Stores the translation in data-translated when showing original.
+ */
+export function toggleOriginal(index: number): boolean {
+  const el = findElementByIndex(index);
+  if (!el) return false;
+  const original = el.getAttribute(ATTR_ORIGINAL);
+  if (original == null) return false;
+
+  if (el.getAttribute("data-showing-original") === "true") {
+    const translated = el.getAttribute("data-translated");
+    if (!translated) return false;
+    if (translated === original) {
+      // Same text on both sides — no visual change, just clean up
+      el.removeAttribute("data-translated");
+      el.removeAttribute("data-showing-original");
+      el.setAttribute(ATTR_STATE, "translated");
+      return true;
+    }
+    el.textContent = translated;
+    el.removeAttribute("data-translated");
+    el.removeAttribute("data-showing-original");
+    el.setAttribute(ATTR_STATE, "translated");
+  } else {
+    const translated = el.textContent || "";
+    if (translated === original) return true; // nothing to toggle
+    el.setAttribute("data-translated", translated);
+    el.textContent = original;
+    el.setAttribute("data-showing-original", "true");
+    el.setAttribute(ATTR_STATE, "waiting");
+  }
+  return true;
+}
+
+/**
  * Applies a batch of translation results.
  */
 export function applyTranslations(results: TranslationResult[]): void {

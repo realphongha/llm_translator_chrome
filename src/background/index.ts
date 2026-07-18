@@ -26,7 +26,7 @@ import { testApiConnection } from "./api";
 // ── Message types ─────────────────────────────
 
 export type BgMessage =
-  | { type: "ENQUEUE"; items: Array<{ text: string; elementIndex: number; priority?: number }> }
+  | { type: "ENQUEUE"; items: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean }> }
   | { type: "TRANSLATE_NOW" }
   | { type: "RETRANSLATE" }
   | { type: "PAUSE" }

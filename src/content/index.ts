@@ -11,7 +11,7 @@ import {
   ATTR_ORIGINAL,
   ATTR_PRIORITY,
 } from "./extractor";
-import { applyTranslations, injectStyles, markElementsTranslating, revertTranslatingElement, revertStuckElements } from "./renderer";
+import { applyTranslations, injectStyles, markElementsTranslating, revertTranslatingElement, revertStuckElements, toggleOriginal } from "./renderer";
 import type { SiteConfig, PriorityRule } from "../storage/config";
 import type { TranslationResult } from "../background/queue";
 
@@ -463,6 +463,177 @@ function scanDOM(
 
   return results;
 }
+
+// ── Hover tooltip for translated elements ──
+
+function buildRetranslateInstruction(previousTranslation: string, comment?: string): string {
+  let text = "The above paragraph was previously translated.\n\n";
+  text += `Previous translation: ${previousTranslation}\n\n`;
+  if (comment) {
+    text += `Review note: ${comment}\n\n`;
+  }
+  text += "Please review the translation above and provide a corrected version.\n";
+  text += "Return only the corrected translation.";
+  return text;
+}
+
+let _tooltipTimer: ReturnType<typeof setTimeout> | null = null;
+let _tooltipEl: HTMLElement | null = null;
+let _tooltipTarget: Element | null = null;
+
+function hideTooltip(): void {
+  if (_tooltipTimer) { clearTimeout(_tooltipTimer); _tooltipTimer = null; }
+  _tooltipEl?.remove();
+  _tooltipEl = null;
+  _tooltipTarget = null;
+}
+
+function scheduleHideTooltip(delay: number): void {
+  if (_tooltipTimer) clearTimeout(_tooltipTimer);
+  _tooltipTimer = setTimeout(hideTooltip, delay);
+}
+
+function showTooltip(el: Element): void {
+  // Same element → just refresh timer
+  if (_tooltipTarget === el) {
+    scheduleHideTooltip(3000);
+    return;
+  }
+
+  hideTooltip();
+  _tooltipTarget = el;
+
+  const rect = el.getBoundingClientRect();
+  const t = document.createElement("div");
+  _tooltipEl = t;
+  t.id = "llt-tooltip";
+  t.style.cssText = `
+    position: fixed; z-index: 2147483647;
+    left: ${Math.min(rect.right + 6, window.innerWidth - 230)}px;
+    top: ${rect.top}px;
+    background: #1c1f28; border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 8px; padding: 3px; min-width: 210px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    font-family: -apple-system, system-ui, sans-serif; font-size: 12px;
+    display: flex; flex-direction: column; gap: 1px;
+  `;
+
+  // Close button
+  const header = document.createElement("div");
+  header.style.cssText = `
+    display: flex; justify-content: flex-end; padding: 0 2px;
+  `;
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "\u2715";
+  closeBtn.title = "Close";
+  closeBtn.style.cssText = `
+    background: none; border: none; cursor: pointer;
+    color: #6a6e84; font-size: 12px; padding: 2px 4px; border-radius: 3px;
+    line-height: 1;
+  `;
+  closeBtn.addEventListener("mouseenter", () => closeBtn.style.color = "#c8cbd8");
+  closeBtn.addEventListener("mouseleave", () => closeBtn.style.color = "#6a6e84");
+  closeBtn.addEventListener("click", () => hideTooltip());
+  header.appendChild(closeBtn);
+  t.appendChild(header);
+
+  const idx = parseInt(el.getAttribute(ATTR_TRANSLATION_ID)!);
+
+  const items = [
+    { label: "Toggle Original / Translated", action: () => { toggleOriginal(idx); hideTooltip(); } },
+    { label: "Retranslate", action: () => { hideTooltip(); retranslateElement(el, false); } },
+    { label: "Retranslate with Comment\u2026", action: () => { hideTooltip(); retranslateElement(el, true); } },
+  ];
+
+  for (const item of items) {
+    const btn = document.createElement("button");
+    btn.textContent = item.label;
+    btn.style.cssText = `
+      display: block; width: 100%; text-align: left; padding: 6px 10px;
+      background: none; border: none; border-radius: 5px;
+      color: #c8cbd8; cursor: pointer; font-family: inherit; font-size: 12px;
+      white-space: nowrap;
+    `;
+    btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.07)"; if (_tooltipTimer) { clearTimeout(_tooltipTimer); _tooltipTimer = null; } });
+    btn.addEventListener("mouseleave", () => { btn.style.background = "none"; scheduleHideTooltip(3000); });
+    btn.addEventListener("click", (e) => { e.stopPropagation(); item.action(); });
+    t.appendChild(btn);
+  }
+
+  document.body.appendChild(t);
+  scheduleHideTooltip(3000);
+}
+
+document.addEventListener("mouseover", (e) => {
+  const el = (e.target as Element).closest(`[${ATTR_TRANSLATION_ID}]`);
+  if (el) {
+    showTooltip(el);
+  } else if (_tooltipEl && !_tooltipEl.contains(e.target as Node)) {
+    scheduleHideTooltip(3000);
+  }
+});
+
+async function retranslateElement(el: Element, withComment: boolean): Promise<{ ok: boolean; error?: string }> {
+  const originalText = el.getAttribute(ATTR_ORIGINAL);
+  if (!originalText) return { ok: false, error: "No original text found" };
+
+  const previousTranslation = el.textContent || "";
+
+  let comment: string | null = null;
+  if (withComment) {
+    comment = window.prompt("Enter a review note for the retranslation:");
+    if (comment === null) return { ok: false, error: "Cancelled" };
+  }
+
+  // Revert the element to original text
+  const idx = parseInt(el.getAttribute(ATTR_TRANSLATION_ID)!);
+  pendingIndices.delete(idx);
+  const parent = el.parentElement;
+  if (!parent) return { ok: false, error: "Element has no parent" };
+  revertTranslatingElement(el);
+
+  // Re-extract the parent scope to get a fresh element index
+  const extracted = extractTranslatableNodes(
+    parent,
+    siteConfig?.selector || "",
+    siteConfig?.ignore || [],
+    siteConfig?.priorityRules || []
+  );
+
+  // Find the re-extracted node
+  const newNode = extracted.find((n) => n.text === originalText.trim());
+  if (!newNode) return { ok: false, error: "Failed to re-extract element" };
+
+  // Build instruction with previous translation for context
+  const instruction = buildRetranslateInstruction(previousTranslation, comment || undefined);
+
+  // Enqueue with skipCache so the API is called fresh
+  pendingIndices.add(newNode.elementIndex);
+  markElementsTranslating([newNode.elementIndex]);
+
+  const response = await sendToBackground({
+    type: "ENQUEUE",
+    items: [{
+      text: newNode.text,
+      elementIndex: newNode.elementIndex,
+      priority: newNode.priority !== Infinity ? newNode.priority : undefined,
+      instruction,
+      skipCache: true,
+    }],
+  });
+
+  if (!response.ok) {
+    pendingIndices.delete(newNode.elementIndex);
+    revertTranslatingElement(newNode.element);
+    return { ok: false, error: response.error || "Failed to enqueue" };
+  }
+
+  return { ok: true };
+}
+
+// ── Helpers ───────────────────────────────────
+
+// ── Helpers ───────────────────────────────────
 
 // ── Helpers ───────────────────────────────────
 
