@@ -104,6 +104,13 @@ async function init(): Promise<void> {
   observer.start();
 }
 
+function looksLikeSourceLanguage(text: string, sourceLanguage: string): boolean {
+  if (sourceLanguage.includes("Chinese")) {
+    return /[\u4E00-\u9FFF]/.test(text);
+  }
+  return true;
+}
+
 // ── Node handling ─────────────────────────────
 
 async function handleNewNodes(addedElements: Element[]): Promise<void> {
@@ -112,11 +119,11 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
   const newNodes: ReturnType<typeof extractTranslatableNodes> = [];
 
   for (const root of addedElements) {
-    // Check if the root itself is translatable
     if (
       !isTranslated(root) &&
       root.textContent?.trim() &&
-      !root.querySelector("[" + ATTR_TRANSLATION_ID + "]")
+      !root.querySelector("[" + ATTR_TRANSLATION_ID + "]") &&
+      looksLikeSourceLanguage(root.textContent, siteConfig.sourceLanguage)
     ) {
       const extracted = extractTranslatableNodes(
         root,
