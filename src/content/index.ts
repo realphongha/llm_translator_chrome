@@ -8,6 +8,7 @@ import {
   restoreOriginals,
   isTranslated,
   clearTranslationMemory,
+  lookupOriginal,
   ATTR_TRANSLATION_ID,
   ATTR_ORIGINAL,
   ATTR_STATE,
@@ -579,8 +580,15 @@ document.addEventListener("mouseover", (e) => {
 });
 
 async function retranslateElement(el: Element, withComment: boolean): Promise<{ ok: boolean; error?: string }> {
-  const originalText = el.getAttribute(ATTR_ORIGINAL);
-  if (!originalText) return { ok: false, error: "No original text found" };
+  const idxAttr = el.getAttribute(ATTR_TRANSLATION_ID);
+  if (!idxAttr) return { ok: false, error: "Element is not translated" };
+
+  const currentText = (el.textContent || "").trim();
+  // The true source is the in-session translation memory match (covers the case
+  // where data-original was corrupted to hold the translation). Fall back to
+  // data-original. If neither yields text, we have no source to retranslate.
+  const original = lookupOriginal(currentText) ?? el.getAttribute(ATTR_ORIGINAL) ?? "";
+  if (!original) return { ok: false, error: "No original text found" };
 
   const previousTranslation = el.textContent || "";
 
@@ -590,46 +598,36 @@ async function retranslateElement(el: Element, withComment: boolean): Promise<{ 
     if (comment === null) return { ok: false, error: "Cancelled" };
   }
 
-  // Revert the element to original text
-  const idx = parseInt(el.getAttribute(ATTR_TRANSLATION_ID)!);
-  pendingIndices.delete(idx);
-  const parent = el.parentElement;
-  if (!parent) return { ok: false, error: "Element has no parent" };
-  revertTranslatingElement(el);
+  const idx = parseInt(idxAttr, 10);
 
-  // Re-extract the parent scope to get a fresh element index
-  const extracted = extractTranslatableNodes(
-    parent,
-    siteConfig?.selector || "",
-    siteConfig?.ignore || [],
-    siteConfig?.priorityRules || []
-  );
-
-  // Find the re-extracted node
-  const newNode = extracted.find((n) => n.text === originalText.trim());
-  if (!newNode) return { ok: false, error: "Failed to re-extract element" };
+  // Correct a corrupted data-original so future ops and applyTranslation use the
+  // real source. Then mark as translating and re-enqueue the true original
+  // against the same element index — no revert/re-extract needed (which would
+  // conflict with the translation-memory branch in extractTranslatableNodes).
+  el.setAttribute(ATTR_ORIGINAL, original);
+  pendingIndices.add(idx);
+  markElementsTranslating([idx]);
 
   // Build instruction with previous translation for context
   const instruction = buildRetranslateInstruction(previousTranslation, comment || undefined);
 
   // Enqueue with skipCache so the API is called fresh
-  pendingIndices.add(newNode.elementIndex);
-  markElementsTranslating([newNode.elementIndex]);
-
   const response = await sendToBackground({
     type: "ENQUEUE",
     items: [{
-      text: newNode.text,
-      elementIndex: newNode.elementIndex,
-      priority: newNode.priority !== Infinity ? newNode.priority : undefined,
+      text: original,
+      elementIndex: idx,
+      priority: el.hasAttribute(ATTR_PRIORITY)
+        ? parseInt(el.getAttribute(ATTR_PRIORITY)!, 10)
+        : undefined,
       instruction,
       skipCache: true,
     }],
   });
 
   if (!response.ok) {
-    pendingIndices.delete(newNode.elementIndex);
-    revertTranslatingElement(newNode.element);
+    pendingIndices.delete(idx);
+    revertTranslatingElement(el);
     return { ok: false, error: response.error || "Failed to enqueue" };
   }
 
