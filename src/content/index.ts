@@ -33,6 +33,7 @@ let pendingIndices = new Set<number>();
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 let isReloading = false;
 let floatingBar: HTMLElement | null = null;
+let floatingTooltip: HTMLElement | null = null;
 
 async function reloadAndRetranslate(): Promise<void> {
   if (isReloading) return;
@@ -150,29 +151,66 @@ function showFloatingBar(): void {
     font-family: -apple-system, system-ui, sans-serif;
   `;
 
-  const btnStyle = "border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;font-weight:500;color:#fff;";
+  const btnStyle = "border:none;border-radius:6px;width:32px;height:32px;padding:0;cursor:pointer;font-size:16px;line-height:1;color:#fff;display:flex;align-items:center;justify-content:center;";
+
+  // Shared custom tooltip element (themed to match the bar).
+  const tip = document.createElement("div");
+  tip.id = "llt-bar-tooltip";
+  tip.style.cssText = `
+    position: fixed; z-index: 2147483647;
+    background: #1c1f28; color: #e6e8f0;
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+    padding: 4px 8px; font-size: 12px; line-height: 1.2;
+    font-family: -apple-system, system-ui, sans-serif;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    pointer-events: none; white-space: nowrap;
+    opacity: 0; transition: opacity 0.1s;
+  `;
+  document.body.appendChild(tip);
+  floatingTooltip = tip;
+
+  function attachTooltip(btn: HTMLButtonElement, getText: () => string): void {
+    btn.addEventListener("mouseenter", () => {
+      tip.textContent = getText();
+      const r = btn.getBoundingClientRect();
+      tip.style.opacity = "0";
+      // Position below the button, right-aligned to it.
+      tip.style.top = `${r.bottom + 6}px`;
+      const tipRect = tip.getBoundingClientRect();
+      const left = Math.max(4, Math.min(r.right - tipRect.width, window.innerWidth - tipRect.width - 4));
+      tip.style.left = `${left}px`;
+      tip.style.opacity = "1";
+    });
+    btn.addEventListener("mouseleave", () => {
+      tip.style.opacity = "0";
+    });
+  }
 
   const translateBtn = document.createElement("button");
-  translateBtn.textContent = "Translate";
+  translateBtn.textContent = "\u{1F310}";
   translateBtn.style.cssText = btnStyle + "background:#3b6ef0;";
   translateBtn.addEventListener("click", () => {
     translateAll().then(() => observer?.start()).catch(console.error);
   });
+  attachTooltip(translateBtn, () => "Translate");
 
   const retranslateBtn = document.createElement("button");
-  retranslateBtn.textContent = "Retranslate";
+  retranslateBtn.textContent = "\u21BB";
   retranslateBtn.style.cssText = btnStyle + "background:#4a5160;";
   retranslateBtn.addEventListener("click", () => {
     reloadAndRetranslate().catch(console.error);
   });
+  attachTooltip(retranslateBtn, () => "Retranslate (fresh, ignores cache)");
 
+  let showingOriginal = false;
   const toggleBtn = document.createElement("button");
-  toggleBtn.textContent = "Show Original";
+  toggleBtn.textContent = "\u21C4";
   toggleBtn.style.cssText = btnStyle + "background:#4a5160;";
   toggleBtn.addEventListener("click", () => {
-    const showingOriginal = toggleAllOriginal();
-    toggleBtn.textContent = showingOriginal ? "Show Translated" : "Show Original";
+    showingOriginal = toggleAllOriginal();
+    tip.textContent = showingOriginal ? "Show translated text" : "Show original text";
   });
+  attachTooltip(toggleBtn, () => (showingOriginal ? "Show translated text" : "Show original text"));
 
   bar.appendChild(translateBtn);
   bar.appendChild(retranslateBtn);
@@ -184,6 +222,8 @@ function showFloatingBar(): void {
 function hideFloatingBar(): void {
   floatingBar?.remove();
   floatingBar = null;
+  floatingTooltip?.remove();
+  floatingTooltip = null;
 }
 
 // ── Node handling ─────────────────────────────
