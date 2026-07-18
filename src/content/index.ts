@@ -27,11 +27,12 @@ const CHUNK_DELAY = 1500;
 
 let siteConfig: SiteConfig | null = null;
 let observer: DOMObserver | null = null;
-let enabled = true;
+let mode: "off" | "on" | "auto" = "off";
 let queueCount = 0;
 let pendingIndices = new Set<number>();
 let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 let isReloading = false;
+let floatingBar: HTMLElement | null = null;
 
 async function reloadAndRetranslate(): Promise<void> {
   if (isReloading) return;
@@ -71,12 +72,15 @@ async function init(): Promise<void> {
   }
 
   siteConfig = response.data as SiteConfig;
-  enabled = siteConfig.enabled;
+  mode = siteConfig.mode || "off";
 
   // Clear any existing queue items for this tab first to avoid translating stale nodes
   await sendToBackground({ type: "CLEAR_QUEUE" });
 
-  if (!enabled) return;
+  if (mode === "off") {
+    hideFloatingBar();
+    return;
+  }
 
   // Create observer (not yet started)
   observer = new DOMObserver(
@@ -88,8 +92,25 @@ async function init(): Promise<void> {
     }
   );
 
-  // Extract initial content before observer starts to avoid
-  // self-triggering on <span> wrapper mutations
+  // Show the floating control bar for both "on" and "auto" modes.
+  showFloatingBar();
+
+  if (mode === "auto") {
+    // Auto-translate on load (current behavior) and observe dynamic content.
+    await translateAll();
+    observer.start();
+  }
+  // In "on" mode we stay manual: the user clicks Translate (which then starts
+  // the observer) or Retranslate from the floating bar.
+}
+
+/**
+ * Extracts all translatable content from the document and enqueues it.
+ * Used for the initial auto-translate (auto mode) and the manual "Translate"
+ * button (on mode).
+ */
+async function translateAll(): Promise<void> {
+  if (!siteConfig) return;
   const allNodes = extractTranslatableNodes(
     document,
     siteConfig.selector || "",
@@ -101,17 +122,58 @@ async function init(): Promise<void> {
   // nodes to sort and prioritize. Streaming to the user is handled incrementally
   // by the background script after each sub-batch completion.
   if (allNodes.length > 0) {
-    enqueueNodes(allNodes).catch(console.error);
+    await enqueueNodes(allNodes);
   }
+}
 
-  // Start observer for dynamic content
-  observer.start();
+// ── Floating control bar ──────────────────────
+
+const FLOATING_BAR_ID = "llt-floating-bar";
+
+function showFloatingBar(): void {
+  if (floatingBar) return;
+  const bar = document.createElement("div");
+  bar.id = FLOATING_BAR_ID;
+  bar.style.cssText = `
+    position: fixed; top: 12px; right: 12px; z-index: 2147483646;
+    display: flex; flex-direction: row; gap: 6px;
+    background: #1c1f28; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 6px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+    font-family: -apple-system, system-ui, sans-serif;
+  `;
+
+  const btnStyle = "border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px;font-weight:500;color:#fff;";
+
+  const translateBtn = document.createElement("button");
+  translateBtn.textContent = "Translate";
+  translateBtn.style.cssText = btnStyle + "background:#3b6ef0;";
+  translateBtn.addEventListener("click", () => {
+    translateAll().then(() => observer?.start()).catch(console.error);
+  });
+
+  const retranslateBtn = document.createElement("button");
+  retranslateBtn.textContent = "Retranslate";
+  retranslateBtn.style.cssText = btnStyle + "background:#4a5160;";
+  retranslateBtn.addEventListener("click", () => {
+    reloadAndRetranslate().catch(console.error);
+  });
+
+  bar.appendChild(translateBtn);
+  bar.appendChild(retranslateBtn);
+  document.body.appendChild(bar);
+  floatingBar = bar;
+}
+
+function hideFloatingBar(): void {
+  floatingBar?.remove();
+  floatingBar = null;
 }
 
 // ── Node handling ─────────────────────────────
 
 async function handleNewNodes(addedElements: Element[]): Promise<void> {
-  if (!siteConfig || !enabled) return;
+  if (!siteConfig || mode === "off") return;
 
   const newNodes: ReturnType<typeof extractTranslatableNodes> = [];
 

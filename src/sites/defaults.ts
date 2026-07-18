@@ -9,7 +9,7 @@ type SitePreset = Omit<SiteConfig, "hostname">;
 
 const SITE_PRESETS: Record<string, SitePreset> = {
   "qidian.com": {
-    enabled: false,
+    mode: "off",
     prompt: "qidian-vn",
     sourceLanguage: "Chinese (Simplified)",
     targetLanguage: "Vietnamese",
@@ -19,7 +19,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     priorityRules: [{ selector: ".article-wrapper p", priority: 1 }],
   },
   "m.qidian.com": {
-    enabled: false,
+    mode: "off",
     prompt: "qidian-vn",
     sourceLanguage: "Chinese (Simplified)",
     targetLanguage: "Vietnamese",
@@ -29,7 +29,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     priorityRules: [{ selector: ".read-content p", priority: 1 }],
   },
   "www.novelupdates.com": {
-    enabled: false,
+    mode: "off",
     prompt: "general",
     sourceLanguage: "Auto",
     targetLanguage: "Vietnamese",
@@ -39,7 +39,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
     priorityRules: [],
   },
   "fanyi.baidu.com": {
-    enabled: false,
+    mode: "off",
     prompt: "general",
     sourceLanguage: "Auto",
     targetLanguage: "English",
@@ -51,7 +51,7 @@ const SITE_PRESETS: Record<string, SitePreset> = {
 };
 
 const DEFAULT_PRESET: SitePreset = {
-  enabled: false,
+  mode: "off",
   prompt: "general",
   sourceLanguage: "Auto",
   targetLanguage: "English",

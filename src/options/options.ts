@@ -339,7 +339,7 @@ function renderSiteList(sites: SiteConfig[], globalConfig: GlobalConfig): void {
     const card = document.createElement("div");
     card.className = "site-card-item";
     card.innerHTML = `
-      <div class="site-card-item__status ${site.enabled ? "site-card-item__status--on" : "site-card-item__status--off"}"></div>
+      <div class="site-card-item__status ${site.mode === "off" ? "site-card-item__status--off" : "site-card-item__status--on"}"></div>
       <div class="site-card-item__info">
         <div class="site-card-item__hostname">${escHtml(site.hostname)}</div>
         <div class="site-card-item__details">
@@ -358,7 +358,7 @@ function renderSiteList(sites: SiteConfig[], globalConfig: GlobalConfig): void {
 function openSiteEditor(site: SiteConfig, globalConfig: GlobalConfig): void {
   const editor = document.getElementById("site-editor")!;
   const hostnameLabel = document.getElementById("editing-hostname")!;
-  const enabledCheck = document.getElementById("site-edit-enabled") as HTMLInputElement;
+  const modeSel = document.getElementById("site-edit-mode") as HTMLSelectElement;
   const promptSel = document.getElementById("site-edit-prompt") as HTMLSelectElement;
   const sourceSel = document.getElementById("site-edit-source") as HTMLSelectElement;
   const targetSel = document.getElementById("site-edit-target") as HTMLSelectElement;
@@ -370,7 +370,14 @@ function openSiteEditor(site: SiteConfig, globalConfig: GlobalConfig): void {
   const btnDelete = document.getElementById("btn-delete-site")!;
 
   hostnameLabel.textContent = site.hostname;
-  enabledCheck.checked = site.enabled;
+  modeSel.innerHTML = "";
+  for (const m of ["off", "on", "auto"] as const) {
+    const opt = document.createElement("option");
+    opt.value = m;
+    opt.textContent = m.toUpperCase();
+    opt.selected = (site.mode || "off") === m;
+    modeSel.appendChild(opt);
+  }
 
   // Populate prompt select
   promptSel.innerHTML = "";
@@ -411,7 +418,7 @@ function openSiteEditor(site: SiteConfig, globalConfig: GlobalConfig): void {
   newSave.addEventListener("click", async () => {
     const updated: SiteConfig = {
       hostname: site.hostname,
-      enabled: enabledCheck.checked,
+      mode: (modeSel.value as "off" | "on" | "auto") || "off",
       prompt: promptSel.value,
       sourceLanguage: sourceSel.value,
       targetLanguage: targetSel.value,

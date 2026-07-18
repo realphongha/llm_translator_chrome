@@ -157,7 +157,7 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
       await saveSiteConfig(siteConfig);
     }
 
-    if (!siteConfig.enabled) {
+    if (siteConfig.mode === "off") {
       clearQueue(tabId);
       // Tell content script to disable itself (restore originals, stop observer)
       await chrome.tabs.sendMessage(tabId, { type: "RETRANSLATE" }).catch(() => {});

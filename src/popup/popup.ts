@@ -20,13 +20,7 @@ const sourceLang = document.getElementById("source-lang") as HTMLSelectElement;
 const targetLang = document.getElementById("target-lang") as HTMLSelectElement;
 const queueCount = document.getElementById("queue-count")!;
 const translationStatus = document.getElementById("translation-status")!;
-const btnTranslate = document.getElementById("btn-translate") as HTMLButtonElement;
-const btnRetranslate = document.getElementById("btn-retranslate") as HTMLButtonElement;
-const btnToggle = document.getElementById("btn-toggle") as HTMLButtonElement;
-const toggleLabel = document.getElementById("toggle-label")!;
-const pauseIcon = document.getElementById("pause-icon")!;
-const resumeIcon = document.getElementById("resume-icon")!;
-const siteEnabled = document.getElementById("site-enabled") as HTMLInputElement;
+const modeSegment = document.getElementById("mode-segment")!;
 const btnSettings = document.getElementById("btn-settings")!;
 const btnClearCache = document.getElementById("btn-clear-cache") as HTMLButtonElement;
 
@@ -44,7 +38,6 @@ const ruleCount = document.getElementById("rule-count")!;
 // ── State ─────────────────────────────────────
 
 let currentHostname = "";
-let isPaused = false;
 let currentPriorityRules: PriorityRule[] = [];
 let currentTabId = 0;
 
@@ -79,8 +72,8 @@ async function init(): Promise<void> {
   populatePromptSelect(globalConfig.userPrompts, site.prompt);
   populateLanguageSelects(site.sourceLanguage, site.targetLanguage);
 
-  siteEnabled.checked = site.enabled;
-  updateStatusBadge(site.enabled);
+  setActiveMode(site.mode || "off");
+  updateStatusBadge(site.mode || "off");
 
   const statusRes = await sendToBackground({ type: "GET_STATUS" }) as {
     ok: boolean;
@@ -89,8 +82,7 @@ async function init(): Promise<void> {
 
   if (statusRes.ok) {
     updateQueueCount(statusRes.data.queueCount);
-    isPaused = statusRes.data.paused;
-    updatePauseButton();
+
     translationStatus.textContent = statusRes.data.running ? "Running" : "Idle";
   }
 
@@ -342,32 +334,13 @@ function renderScanResults(
 function attachEvents(
   site: import("../storage/config").SiteConfig
 ): void {
-  btnTranslate.addEventListener("click", async () => {
-    await saveCurrentSettings();
-    await sendToBackground({ type: "TRANSLATE_NOW" });
-    // Keep popup open so the user can watch the progress
-  });
-
-  btnRetranslate.addEventListener("click", async () => {
-    await saveCurrentSettings();
-    await sendToBackground({ type: "RETRANSLATE" });
-    // Keep popup open so the user can watch the progress
-  });
-
-  btnToggle.addEventListener("click", async () => {
-    if (isPaused) {
-      await sendToBackground({ type: "RESUME" });
-      isPaused = false;
-    } else {
-      await sendToBackground({ type: "PAUSE" });
-      isPaused = true;
-    }
-    updatePauseButton();
-  });
-
-  siteEnabled.addEventListener("change", async () => {
-    updateStatusBadge(siteEnabled.checked);
-    await saveCurrentSettings();
+  modeSegment.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const newMode = btn.dataset.mode as "off" | "on" | "auto";
+      setActiveMode(newMode);
+      updateStatusBadge(newMode);
+      saveCurrentSettings().catch(console.error);
+    });
   });
 
   promptSelect.addEventListener("change", saveCurrentSettings);
@@ -431,19 +404,21 @@ function attachEvents(
 
 async function saveCurrentSettings(): Promise<void> {
   const existing = await loadSiteConfig(currentHostname);
+  const activeModeBtn = modeSegment.querySelector<HTMLButtonElement>(".mode-btn--active");
+  const mode = (activeModeBtn?.dataset.mode as "off" | "on" | "auto") || existing.mode || "off";
   await saveSiteConfig({
     ...existing,
     hostname: currentHostname,
+    mode,
     prompt: promptSelect.value,
     sourceLanguage: sourceLang.value,
     targetLanguage: targetLang.value,
-    enabled: siteEnabled.checked,
     selector: advSelector.value.trim(),
     ignore: advIgnore.value.split(",").map(s => s.trim()).filter(Boolean),
     priorityRules: getCurrentPriorityRules(),
   });
 
-  // Trigger a full retranslate so priority rules take effect immediately
+  // Trigger a full retranslate so mode/priority changes take effect immediately
   try {
     await sendToBackground({ type: "RETRANSLATE" });
   } catch {
@@ -451,9 +426,18 @@ async function saveCurrentSettings(): Promise<void> {
   }
 }
 
-function updateStatusBadge(enabled: boolean): void {
-  statusBadge.textContent = enabled ? "ON" : "OFF";
-  statusBadge.className = enabled ? "badge badge--on" : "badge badge--off";
+function updateStatusBadge(mode: string): void {
+  const labels: Record<string, string> = { off: "OFF", on: "ON", auto: "AUTO" };
+  statusBadge.textContent = labels[mode] ?? mode.toUpperCase();
+  statusBadge.className =
+    mode === "off" ? "badge badge--off" : "badge badge--on";
+}
+
+function setActiveMode(mode: string): void {
+  modeSegment.querySelectorAll<HTMLButtonElement>(".mode-btn").forEach((btn) => {
+    const active = btn.dataset.mode === mode;
+    btn.classList.toggle("mode-btn--active", active);
+  });
 }
 
 function updateQueueCount(count: number): void {
@@ -462,18 +446,6 @@ function updateQueueCount(count: number): void {
     queueCount.classList.add("stat__value--animating");
   } else {
     queueCount.classList.remove("stat__value--animating");
-  }
-}
-
-function updatePauseButton(): void {
-  if (isPaused) {
-    pauseIcon.style.display = "none";
-    resumeIcon.style.display = "block";
-    toggleLabel.textContent = "Resume";
-  } else {
-    pauseIcon.style.display = "block";
-    resumeIcon.style.display = "none";
-    toggleLabel.textContent = "Pause";
   }
 }
 
@@ -565,8 +537,7 @@ async function queryStatus(): Promise<void> {
 
   if (statusRes.ok) {
     updateQueueCount(statusRes.data.queueCount);
-    isPaused = statusRes.data.paused;
-    updatePauseButton();
+
     translationStatus.textContent = statusRes.data.running ? "Running" : "Idle";
   }
 }

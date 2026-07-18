@@ -325,9 +325,9 @@ body {
   transform: none !important;
 }
 
-/* ── Enable toggle ───────────────────────────── */
+/* ── Mode selector ──────────────────────────── */
 
-.enable-row {
+.mode-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -337,56 +337,37 @@ body {
   border-radius: var(--radius-md);
 }
 
-.toggle-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.toggle {
-  position: relative;
+.mode-segment {
   display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.toggle__track {
-  width: 34px;
-  height: 18px;
   background: var(--bg-surface);
   border: 1px solid var(--border-bright);
-  border-radius: 20px;
-  position: relative;
-  transition: all 0.2s ease;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
-.toggle__track::after {
-  content: '';
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: var(--text-muted);
-  border-radius: 50%;
-  top: 2px;
-  left: 2px;
-  transition: all 0.2s ease;
+.mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.toggle input:checked + .toggle__track {
-  background: rgba(91, 138, 240, 0.2);
-  border-color: var(--accent);
+.mode-btn + .mode-btn {
+  border-left: 1px solid var(--border);
 }
 
-.toggle input:checked + .toggle__track::after {
+.mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.mode-btn--active {
   background: var(--accent);
-  transform: translateX(16px);
+  color: #fff;
 }
 
 /* ── Advanced Section ────────────────────────── */

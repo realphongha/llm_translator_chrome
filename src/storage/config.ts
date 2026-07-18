@@ -48,9 +48,14 @@ export interface PriorityRule {
   priority: number; // lower = higher priority (1 = highest)
 }
 
+export type SiteMode = "off" | "on" | "auto";
+
 export interface SiteConfig {
   hostname: string;
-  enabled: boolean;
+  /** @deprecated use `mode` instead */
+  enabled?: boolean;
+  /** Translation mode: off = do nothing, on = manual (floating bar), auto = auto-translate on load */
+  mode: SiteMode;
   /** id of built-in or user prompt */
   prompt: string;
   sourceLanguage: string;
@@ -88,7 +93,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
 };
 
 export const DEFAULT_SITE_CONFIG: Omit<SiteConfig, "hostname"> = {
-  enabled: false,
+  mode: "off",
   prompt: "general",
   sourceLanguage: "Auto",
   targetLanguage: "English",
@@ -126,7 +131,14 @@ export async function loadSiteConfig(hostname: string): Promise<SiteConfig> {
   const key = SITE_PREFIX + hostname;
   const result = await chrome.storage.local.get(key);
   const stored = result[key] as SiteConfig | undefined;
-  if (stored) return stored;
+  if (stored) {
+    // Migrate legacy boolean `enabled` to the new `mode` field.
+    if (stored.mode === undefined && stored.enabled !== undefined) {
+      stored.mode = stored.enabled ? "auto" : "off";
+    }
+    if (stored.mode === undefined) stored.mode = "off";
+    return stored;
+  }
 
   // Auto-create on first visit using site defaults from sites/defaults.ts
   // The caller is responsible for applying site-specific defaults
