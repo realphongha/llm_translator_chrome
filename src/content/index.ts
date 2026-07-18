@@ -104,13 +104,6 @@ async function init(): Promise<void> {
   observer.start();
 }
 
-function looksLikeSourceLanguage(text: string, sourceLanguage: string): boolean {
-  if (sourceLanguage.includes("Chinese")) {
-    return /[\u4E00-\u9FFF]/.test(text);
-  }
-  return true;
-}
-
 // ── Node handling ─────────────────────────────
 
 async function handleNewNodes(addedElements: Element[]): Promise<void> {
@@ -122,8 +115,7 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
     if (
       !isTranslated(root) &&
       root.textContent?.trim() &&
-      !root.querySelector("[" + ATTR_TRANSLATION_ID + "]") &&
-      looksLikeSourceLanguage(root.textContent, siteConfig.sourceLanguage)
+      !root.querySelector("[" + ATTR_TRANSLATION_ID + "]")
     ) {
       const extracted = extractTranslatableNodes(
         root,
@@ -217,7 +209,9 @@ chrome.runtime.onMessage.addListener(
     switch (message.type) {
       case "TRANSLATION_RESULTS": {
         const results = message.results as TranslationResult[];
-        for (const r of results) pendingIndices.delete(r.elementIndex);
+        for (const r of results) {
+          pendingIndices.delete(r.elementIndex);
+        }
         applyTranslations(results);
         sendResponse({ ok: true });
         break;
@@ -516,56 +510,40 @@ function showTooltip(el: Element): void {
   t.id = "llt-tooltip";
   t.style.cssText = `
     position: fixed; z-index: 2147483647;
-    left: ${Math.min(rect.right + 6, window.innerWidth - 230)}px;
+    left: ${Math.min(rect.right + 6, window.innerWidth - 160)}px;
     top: ${rect.top}px;
     background: #1c1f28; border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 8px; padding: 3px; min-width: 210px;
+    border-radius: 8px; padding: 1px;
     box-shadow: 0 6px 24px rgba(0,0,0,0.5);
-    font-family: -apple-system, system-ui, sans-serif; font-size: 12px;
-    display: flex; flex-direction: column; gap: 1px;
+    font-family: -apple-system, system-ui, sans-serif;
+    display: flex; flex-direction: row; align-items: center;
   `;
-
-  // Close button
-  const header = document.createElement("div");
-  header.style.cssText = `
-    display: flex; justify-content: flex-end; padding: 0 2px;
-  `;
-  const closeBtn = document.createElement("button");
-  closeBtn.textContent = "\u2715";
-  closeBtn.title = "Close";
-  closeBtn.style.cssText = `
-    background: none; border: none; cursor: pointer;
-    color: #6a6e84; font-size: 12px; padding: 2px 4px; border-radius: 3px;
-    line-height: 1;
-  `;
-  closeBtn.addEventListener("mouseenter", () => closeBtn.style.color = "#c8cbd8");
-  closeBtn.addEventListener("mouseleave", () => closeBtn.style.color = "#6a6e84");
-  closeBtn.addEventListener("click", () => hideTooltip());
-  header.appendChild(closeBtn);
-  t.appendChild(header);
 
   const idx = parseInt(el.getAttribute(ATTR_TRANSLATION_ID)!);
 
-  const items = [
-    { label: "Toggle Original / Translated", action: () => { toggleOriginal(idx); hideTooltip(); } },
-    { label: "Retranslate", action: () => { hideTooltip(); retranslateElement(el, false); } },
-    { label: "Retranslate with Comment\u2026", action: () => { hideTooltip(); retranslateElement(el, true); } },
-  ];
+  // Hide toggle when original matches current text (corrupted)
+  const orig = el.getAttribute(ATTR_ORIGINAL);
+  const showingOrig = el.getAttribute("data-showing-original") === "true";
+  const canToggle = orig != null && (showingOrig || el.textContent !== orig);
 
-  for (const item of items) {
+  const btnStyle = "width:28px;height:28px;padding:0;border:none;border-radius:4px;background:none;cursor:pointer;color:#c8cbd8;font-size:16px;display:flex;align-items:center;justify-content:center;line-height:1;";
+
+  function addBtn(symbol: string, title: string, action: () => void): HTMLButtonElement {
     const btn = document.createElement("button");
-    btn.textContent = item.label;
-    btn.style.cssText = `
-      display: block; width: 100%; text-align: left; padding: 6px 10px;
-      background: none; border: none; border-radius: 5px;
-      color: #c8cbd8; cursor: pointer; font-family: inherit; font-size: 12px;
-      white-space: nowrap;
-    `;
+    btn.textContent = symbol;
+    btn.title = title;
+    btn.style.cssText = btnStyle;
     btn.addEventListener("mouseenter", () => { btn.style.background = "rgba(255,255,255,0.07)"; if (_tooltipTimer) { clearTimeout(_tooltipTimer); _tooltipTimer = null; } });
     btn.addEventListener("mouseleave", () => { btn.style.background = "none"; scheduleHideTooltip(3000); });
-    btn.addEventListener("click", (e) => { e.stopPropagation(); item.action(); });
+    btn.addEventListener("click", (e) => { e.stopPropagation(); action(); });
     t.appendChild(btn);
+    return btn;
   }
+
+  if (canToggle) addBtn("\u21C4", "Toggle Original / Translated", () => { toggleOriginal(idx); hideTooltip(); });
+  addBtn("\u21BB", "Retranslate", () => { hideTooltip(); retranslateElement(el, false); });
+  addBtn("\u270E", "Retranslate with Comment", () => { hideTooltip(); retranslateElement(el, true); });
+  addBtn("\u2715", "Close", () => hideTooltip());
 
   document.body.appendChild(t);
   scheduleHideTooltip(3000);
