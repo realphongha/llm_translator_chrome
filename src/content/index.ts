@@ -7,6 +7,7 @@ import {
   extractTranslatableNodes,
   restoreOriginals,
   isTranslated,
+  clearTranslationMemory,
   ATTR_TRANSLATION_ID,
   ATTR_ORIGINAL,
   ATTR_STATE,
@@ -38,6 +39,7 @@ async function reloadAndRetranslate(): Promise<void> {
     cancelCleanup();
     observer?.stop();
     restoreOriginals();
+    clearTranslationMemory();
     pendingIndices.clear();
     await init();
   } finally {

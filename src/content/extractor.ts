@@ -26,6 +26,27 @@ export interface ExtractedNode {
 
 let _extractionCounter = 0;
 
+// ── In-session translation memory ──────────────
+// Maps a translated string back to its original source text. Populated when a
+// translation is applied (renderer.ts) and consulted during extraction so that
+// already-translated text left behind after a framework re-render (e.g. Vue
+// discarding our wrapper span) is recognized and re-attached with the correct
+// data-original instead of being re-sent to the LLM as a fresh original.
+const _translationMemory = new Map<string, string>();
+
+export function rememberTranslation(original: string, translated: string): void {
+  if (!original || !translated) return;
+  _translationMemory.set(translated.trim(), original);
+}
+
+export function lookupOriginal(translated: string): string | undefined {
+  return _translationMemory.get(translated.trim());
+}
+
+export function clearTranslationMemory(): void {
+  _translationMemory.clear();
+}
+
 export function isTranslated(el: Element): boolean {
   return el.hasAttribute(ATTR_TRANSLATION_ID);
 }
@@ -116,6 +137,22 @@ export function extractTranslatableNodes(
       if (trimmed.length <= 0) continue;
       if (!/\p{L}/u.test(trimmed)) continue;
       if (isInSkippedContext(textNode, ignoreSelectors)) continue;
+
+      // If this text is already one of our translations (left behind after a
+      // framework re-render dropped our wrapper span), re-attach it with the
+      // correct original instead of re-translating it as a fresh source.
+      const knownOriginal = lookupOriginal(trimmed);
+      if (knownOriginal !== undefined) {
+        const idx = ++_extractionCounter;
+        const span = document.createElement("span");
+        span.setAttribute(ATTR_TRANSLATION_ID, String(idx));
+        span.setAttribute(ATTR_ORIGINAL, knownOriginal);
+        span.setAttribute(ATTR_STATE, "translated");
+        span.textContent = raw;
+        textNode.parentNode!.replaceChild(span, textNode);
+        // Do NOT add to results — no LLM call needed; it's already translated.
+        continue;
+      }
 
       const idx = ++_extractionCounter;
 

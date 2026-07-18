@@ -8,6 +8,7 @@ import {
   ATTR_STATE,
   ATTR_TRANSLATION_ID,
   findElementByIndex,
+  rememberTranslation,
 } from "./extractor";
 import type { TranslationResult } from "../background/queue";
 
@@ -37,6 +38,12 @@ export function applyTranslation(result: TranslationResult): void {
     el.textContent = text;
     el.setAttribute(ATTR_STATE, "translated");
     ensureStateIndicator(el, "translated");
+
+    // Remember the mapping so already-translated text left behind after a
+    // framework re-render can be recognized and re-attached with the correct
+    // data-original instead of being re-translated.
+    const original = el.getAttribute(ATTR_ORIGINAL);
+    if (original !== null) rememberTranslation(original, text);
   } else if (result.state === "error") {
     el.setAttribute(ATTR_STATE, "error");
     ensureStateIndicator(el, "error");
