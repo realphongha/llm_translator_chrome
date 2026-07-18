@@ -84,6 +84,10 @@ export async function callChatCompletions(
   if (config.presence_penalty !== undefined) body.presence_penalty = config.presence_penalty;
   body.chat_template_kwargs = config.chat_template_kwargs ?? { enable_thinking: false };
 
+  console.log(`[LLM API] ${config.model}`);
+  console.log("System:", systemPrompt);
+  console.log("User:", userPrompt);
+
   const controller = new AbortController();
   const timeoutId = setTimeout(
     () => controller.abort(),
@@ -139,6 +143,7 @@ export async function callChatCompletions(
   }
 
   const content = data.choices?.[0]?.message?.content;
+  console.log("Response:", content);
   if (!content || content.trim().length === 0) {
     throw new ApiError("Empty response from API", "empty_response");
   }

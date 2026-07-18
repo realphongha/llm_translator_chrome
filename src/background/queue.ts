@@ -316,10 +316,15 @@ async function processWithCache(
   if (uncached.length === 0) return results;
 
   // Translate uncached items
+  // Use enable_thinking for retranslate items (skipCache flag)
+  const effectiveApiConfig = uncached.some(i => i.skipCache)
+    ? { ...apiConfig, chat_template_kwargs: { ...apiConfig.chat_template_kwargs, enable_thinking: true } }
+    : apiConfig;
+
   const job: BatchJob = {
     items: uncached,
     systemPrompt,
-    apiConfig,
+    apiConfig: effectiveApiConfig,
     translationConfig,
     retryCount: translationConfig.retryCount,
   };

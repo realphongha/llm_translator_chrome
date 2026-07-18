@@ -470,6 +470,7 @@ function scanDOM(
 function buildRetranslateInstruction(previousTranslation: string, comment?: string): string {
   let text = "The above paragraph was previously translated.\n\n";
   text += `Previous translation: ${previousTranslation}\n\n`;
+  text += "The new translation should be different from the previous translation.\n\n";
   if (comment) {
     text += `Review note: ${comment}\n\n`;
   }
