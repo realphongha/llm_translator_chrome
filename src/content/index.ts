@@ -13,7 +13,7 @@ import {
   ATTR_STATE,
   ATTR_PRIORITY,
 } from "./extractor";
-import { applyTranslations, injectStyles, markElementsTranslating, revertTranslatingElement, toggleOriginal } from "./renderer";
+import { applyTranslations, applyTranslation, injectStyles, markElementsTranslating, revertTranslatingElement, toggleOriginal } from "./renderer";
 import type { SiteConfig, PriorityRule } from "../storage/config";
 import type { TranslationResult } from "../background/queue";
 
@@ -562,6 +562,7 @@ function showTooltip(el: Element): void {
   if (canToggle) addBtn("\u21C4", "Toggle Original / Translated", () => { toggleOriginal(idx); hideTooltip(); });
   addBtn("\u21BB", "Retranslate", () => { hideTooltip(); retranslateElement(el, false); });
   addBtn("\u270E", "Retranslate with Comment", () => { hideTooltip(); retranslateElement(el, true); });
+  addBtn("\u270D", "Translate Manually", () => { hideTooltip(); manualTranslateElement(el); });
   addBtn("\u2715", "Close", () => hideTooltip());
 
   document.body.appendChild(t);
@@ -635,7 +636,43 @@ async function retranslateElement(el: Element, withComment: boolean): Promise<{ 
   return { ok: true };
 }
 
-// ── Helpers ───────────────────────────────────
+/**
+ * Applies a user-supplied translation to an element instead of calling the LLM,
+ * and caches it (via the background) using the same key as LLM translations so
+ * identical originals elsewhere reuse it.
+ */
+async function manualTranslateElement(el: Element): Promise<{ ok: boolean; error?: string }> {
+  const idxAttr = el.getAttribute(ATTR_TRANSLATION_ID);
+  if (!idxAttr) return { ok: false, error: "Element is not translated" };
+
+  const original = el.getAttribute(ATTR_ORIGINAL);
+  if (!original) return { ok: false, error: "No original text found" };
+
+  const translation = window.prompt("Enter your translation:", el.textContent || "");
+  if (translation === null || translation.trim().length === 0) {
+    return { ok: false, error: "Cancelled" };
+  }
+
+  const idx = parseInt(idxAttr, 10);
+
+  // Apply immediately (reuses renderer logic; also records it in the in-session
+  // translation memory so framework re-renders are recognized).
+  applyTranslation({ elementIndex: idx, translation, state: "translated" });
+
+  // Cache it in the background, keyed by (systemPrompt, model, original),
+  // identical to how LLM results are cached.
+  const response = await sendToBackground({
+    type: "SET_MANUAL_TRANSLATION",
+    original,
+    translation,
+  });
+
+  if (!response.ok) {
+    return { ok: false, error: response.error || "Failed to cache translation" };
+  }
+
+  return { ok: true };
+}
 
 // ── Helpers ───────────────────────────────────
 

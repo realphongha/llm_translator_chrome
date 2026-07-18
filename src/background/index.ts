@@ -20,7 +20,7 @@ import {
   onResults,
   onQueueChanged,
 } from "./queue";
-import { clearCache, getCacheStats, initCache } from "./cache";
+import { clearCache, getCacheStats, initCache, setCached } from "./cache";
 import { testApiConnection } from "./api";
 
 // ── Message types ─────────────────────────────
@@ -37,7 +37,8 @@ export type BgMessage =
   | { type: "TEST_API" }
   | { type: "CLEAR_CACHE" }
   | { type: "GET_CACHE_STATS" }
-  | { type: "CLEAR_QUEUE" };
+  | { type: "CLEAR_QUEUE" }
+  | { type: "SET_MANUAL_TRANSLATION"; original: string; translation: string };
 
 export type BgResponse =
   | { ok: true; data?: unknown }
@@ -90,6 +91,44 @@ onQueueChanged(async (tabId, count) => {
 // ── Track active translation sessions ─────────
 
 const activeSessions = new Map<number, boolean>(); // tabId → running
+
+/**
+ * Resolves the system prompt and model for a tab, mirroring the resolution
+ * used when starting a translation. Returns null if the API is not configured.
+ */
+async function resolveSession(
+  tabId: number
+): Promise<{ systemPrompt: string; model: string } | null> {
+  const globalConfig = await loadGlobalConfig();
+  initCache(globalConfig.cache.maxMb);
+
+  if (!globalConfig.api.base || !globalConfig.api.model) {
+    return null;
+  }
+
+  const tab = await chrome.tabs.get(tabId);
+  const hostname = tab.url ? new URL(tab.url).hostname : "";
+
+  let siteConfig = await loadSiteConfig(hostname);
+  if (!siteConfig.prompt) {
+    siteConfig = createDefaultSiteConfig(hostname);
+    await saveSiteConfig(siteConfig);
+  }
+
+  const systemPrompt = getSystemPrompt(
+    siteConfig.prompt,
+    {
+      source_language: siteConfig.sourceLanguage,
+      target_language: siteConfig.targetLanguage,
+      hostname,
+      url: tab.url ?? "",
+      page_title: tab.title ?? "",
+    },
+    globalConfig.userPrompts
+  );
+
+  return { systemPrompt, model: globalConfig.api.model };
+}
 
 async function startTranslation(tabId: number, retranslate = false): Promise<void> {
   if (activeSessions.get(tabId)) return;
@@ -257,6 +296,23 @@ chrome.runtime.onMessage.addListener(
           case "GET_CACHE_STATS": {
             const stats = await getCacheStats();
             sendResponse({ ok: true, data: stats });
+            break;
+          }
+
+          case "SET_MANUAL_TRANSLATION": {
+            if (!tabId) break;
+            const session = await resolveSession(tabId);
+            if (!session) {
+              sendResponse({ ok: false, error: "API not configured" });
+              break;
+            }
+            await setCached(
+              session.systemPrompt,
+              session.model,
+              message.original,
+              message.translation
+            );
+            sendResponse({ ok: true });
             break;
           }
 
