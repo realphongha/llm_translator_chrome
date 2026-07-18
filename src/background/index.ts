@@ -12,7 +12,6 @@ import { getSystemPrompt } from "../prompts/builtins";
 import {
   enqueue,
   clearQueue,
-  pauseQueue,
   resumeQueue,
   getQueueCount,
   isPaused,
@@ -29,8 +28,6 @@ export type BgMessage =
   | { type: "ENQUEUE"; items: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean }> }
   | { type: "TRANSLATE_NOW" }
   | { type: "RETRANSLATE" }
-  | { type: "PAUSE" }
-  | { type: "RESUME" }
   | { type: "GET_STATUS" }
   | { type: "GET_SITE_CONFIG"; hostname: string }
   | { type: "SAVE_SITE_CONFIG"; config: import("../storage/config").SiteConfig }
@@ -223,20 +220,6 @@ chrome.runtime.onMessage.addListener(
           case "RETRANSLATE": {
             if (!tabId) break;
             startTranslation(tabId, true).catch(console.error);
-            sendResponse({ ok: true });
-            break;
-          }
-
-          case "PAUSE": {
-            if (!tabId) break;
-            pauseQueue(tabId);
-            sendResponse({ ok: true });
-            break;
-          }
-
-          case "RESUME": {
-            if (!tabId) break;
-            resumeQueue(tabId);
             sendResponse({ ok: true });
             break;
           }

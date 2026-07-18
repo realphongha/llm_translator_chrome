@@ -122,11 +122,6 @@ export function clearQueue(tabId: number): void {
   }
 }
 
-export function pauseQueue(tabId: number): void {
-  const queue = tabQueues.get(tabId);
-  if (queue) queue.paused = true;
-}
-
 export function resumeQueue(tabId: number): void {
   const queue = tabQueues.get(tabId);
   if (queue) {
