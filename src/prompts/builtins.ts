@@ -44,10 +44,11 @@ Rules:
 - Sect names, technique names, and cultivation terms follow established conventions for the genre.
 - Existing Vietnamese fan translations of popular works should be referenced for convention alignment when available.
 - Use standard cultivation terminology.
-- **Dialogue self-reference (我)**: "ta" — every character, always. No anh/tớ/mình/tôi/etc.
-- **Dialogue address (你)**: "ngươi" — every character, always. No anh/em/cậu/bạn/etc.
-- **Narration**: "hắn" (male), "nàng" (female), "nó" (neutral/pejorative) — unchanged.
-- **Relationship vocatives**: Still use Han-Viet (sư phụ, sư huynh, tỷ tỷ, đệ, muội) when characters call each other by title — these are nouns, not pronouns, and do not replace ta/ngươi.
+- Dialogue self-reference (我): "ta" — every character, always. No anh/tớ/mình/tôi/etc.
+- Dialogue address (你): "ngươi" — every character, always. No anh/em/cậu/bạn/etc.
+- Narration: "hắn" (male), "nàng" (female), "nó" (neutral/pejorative) — unchanged.
+- Relationship vocatives: Still use Han-Viet (sư phụ, sư huynh, tỷ tỷ, đệ, muội) when characters call each other by title — these are nouns, not pronouns, and do not replace ta/ngươi.
+- For anything not Chinese (e.g., symbols, numbers, English), keep them as-is, don't try to translate them.
 - Preserve paragraph structure.
 - Keep dialogue natural.
 - Do not summarize.
