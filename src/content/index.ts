@@ -59,14 +59,6 @@ async function reloadAndRetranslate(): Promise<void> {
 
 // ── Init ──────────────────────────────────────
 
-function injectNoTranslateMeta(): void {
-  if (document.querySelector('meta[name="google"][content="notranslate"]')) return;
-  const meta = document.createElement("meta");
-  meta.name = "google";
-  meta.content = "notranslate";
-  (document.head || document.documentElement).appendChild(meta);
-}
-
 async function init(autoTranslate = true): Promise<void> {
   injectStyles();
 
@@ -90,9 +82,9 @@ async function init(autoTranslate = true): Promise<void> {
   siteConfig = response.data as SiteConfig;
   mode = siteConfig.mode || "off";
 
-  // Tell Google Translate (and Chrome's built-in translator) not to interfere
-  // for sites we translate ourselves. Only needed in on/auto modes.
-  if (mode !== "off") injectNoTranslateMeta();
+  // Note: the <meta name="google" content="notranslate"> tag (to suppress
+  // Chrome's built-in translator) is injected by the early document_start
+  // content script (early.ts) once <head> exists, gated on on/auto mode.
 
   // Clear any existing queue items for this tab first to avoid translating stale nodes
   await sendToBackground({ type: "CLEAR_QUEUE" });

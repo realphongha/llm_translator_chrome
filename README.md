@@ -77,7 +77,7 @@ Removes the `dist/` directory.
   - `off` — extension does nothing on this site
   - `on` — manual mode: shows the floating control bar, no auto-translate on load. Click **Translate** to translate, then the observer starts so lazily-loaded content auto-translates
   - `auto` — auto-translates on load and observes dynamic (SPA) content
-- For `on`/`auto` sites the extension injects `<meta name="google" content="notranslate">` to suppress Google Translate / Chrome's built-in translator so they don't conflict with our translation
+- For `on`/`auto` sites the extension injects `<meta name="google" content="notranslate">` (via a `document_start` content script, as soon as `<head>` exists) to suppress Google Translate / Chrome's built-in translator so they don't conflict with our translation. `off` sites are left untouched.
 - Priority rules: CSS selector → priority number, matched via `el.closest()`
 
 ### Translation Cache
@@ -141,7 +141,8 @@ Removes the `dist/` directory.
 │   │   ├── queue.ts       Priority queue + parallel worker pool
 │   │   ├── cache.ts       Translation cache with LRU eviction
 │   │   └── index.ts       Message router, translation orchestrator
-│   ├── content/       Content script (DOM extraction, rendering, observer)
+│   ├── content/       Content scripts (DOM extraction, rendering, observer)
+│   │   ├── early.ts       document_start script: injects notranslate meta for on/auto sites
 │   │   ├── extractor.ts   Text extraction + priority computation
 │   │   ├── renderer.ts    DOM update + state indicators
 │   │   ├── observer.ts    MutationObserver + SPA navigation

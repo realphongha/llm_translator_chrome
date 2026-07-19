@@ -43,6 +43,7 @@ const sharedOptions = {
 
 const entryPoints = [
   { in: "src/background/index.ts", out: "dist/background" },
+  { in: "src/content/early.ts", out: "dist/early" },
   { in: "src/content/index.ts", out: "dist/content" },
   { in: "src/popup/popup.ts", out: "dist/popup" },
   { in: "src/options/options.ts", out: "dist/options" },
