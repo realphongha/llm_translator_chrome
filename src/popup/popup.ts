@@ -443,12 +443,10 @@ async function saveCurrentSettings(): Promise<void> {
     priorityRules: getCurrentPriorityRules(),
   });
 
-  // Trigger a full retranslate so mode/priority changes take effect immediately
-  try {
-    await sendToBackground({ type: "RETRANSLATE" });
-  } catch {
-    // Background may not be available
-  }
+  // Trigger a full retranslate so mode/priority changes take effect immediately.
+  // Fire-and-forget: persistence is what the button confirms; the re-translation
+  // runs in the background and must not block the popup UI.
+  sendToBackground({ type: "RETRANSLATE" }).catch(() => {});
 }
 
 function updateStatusBadge(mode: string): void {
