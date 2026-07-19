@@ -23,6 +23,7 @@ const translationStatus = document.getElementById("translation-status")!;
 const modeSegment = document.getElementById("mode-segment")!;
 const btnSettings = document.getElementById("btn-settings")!;
 const btnClearCache = document.getElementById("btn-clear-cache") as HTMLButtonElement;
+const btnSave = document.getElementById("btn-save") as HTMLButtonElement;
 
 // Advanced section
 const btnToggleAdvanced = document.getElementById("btn-toggle-advanced")!;
@@ -352,6 +353,10 @@ function attachEvents(
     window.close();
   });
 
+  btnSave.addEventListener("click", () => {
+    onSave().catch(console.error);
+  });
+
   btnClearCache.addEventListener("click", async () => {
     if (!confirm("Clear all cached translations?")) return;
 
@@ -401,6 +406,26 @@ function attachEvents(
 }
 
 // ── Helpers ───────────────────────────────────
+
+async function onSave(): Promise<void> {
+  const original = btnSave.innerHTML;
+  btnSave.disabled = true;
+  btnSave.textContent = "Saving...";
+  try {
+    await saveCurrentSettings();
+    btnSave.style.color = "var(--success)";
+    btnSave.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Saved`;
+  } catch {
+    btnSave.style.color = "var(--error)";
+    btnSave.textContent = "Error";
+  } finally {
+    setTimeout(() => {
+      btnSave.disabled = false;
+      btnSave.style.color = "";
+      btnSave.innerHTML = original;
+    }, 1200);
+  }
+}
 
 async function saveCurrentSettings(): Promise<void> {
   const existing = await loadSiteConfig(currentHostname);

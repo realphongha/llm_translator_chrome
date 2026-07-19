@@ -295,6 +295,14 @@ body {
   box-shadow: none;
 }
 
+.btn--block {
+  width: 100%;
+}
+
+.save-row {
+  padding: 4px 0 2px;
+}
+
 .btn--secondary {
   background: var(--bg-card);
   color: var(--text-secondary);

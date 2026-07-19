@@ -88,6 +88,7 @@ onQueueChanged(async (tabId, count) => {
 // ── Track active translation sessions ─────────
 
 const activeSessions = new Map<number, boolean>(); // tabId → running
+const pendingRetranslate = new Map<number, boolean>(); // tabId → a retranslate is queued until the current session ends
 
 /**
  * Resolves the system prompt and model for a tab, mirroring the resolution
@@ -185,6 +186,12 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
     await runQueue(tabId, systemPrompt, globalConfig.api, globalConfig.translation);
   } finally {
     activeSessions.delete(tabId);
+    // If a retranslate arrived while this session was running, run it now so a
+    // mid-translation setting change (e.g. target language) isn't silently dropped.
+    if (pendingRetranslate.get(tabId)) {
+      pendingRetranslate.delete(tabId);
+      startTranslation(tabId, true).catch(console.error);
+    }
   }
 }
 
@@ -219,7 +226,17 @@ chrome.runtime.onMessage.addListener(
 
           case "RETRANSLATE": {
             if (!tabId) break;
-            startTranslation(tabId, true).catch(console.error);
+            if (activeSessions.get(tabId)) {
+              // A translation is already running (e.g. the initial auto-translate).
+              // Don't drop this request: clear the stale queue, tell the content
+              // script to restore originals, and defer the re-translation until
+              // the current session finishes.
+              clearQueue(tabId);
+              pendingRetranslate.set(tabId, true);
+              await chrome.tabs.sendMessage(tabId, { type: "RETRANSLATE" }).catch(() => {});
+            } else {
+              startTranslation(tabId, true).catch(console.error);
+            }
             sendResponse({ ok: true });
             break;
           }
