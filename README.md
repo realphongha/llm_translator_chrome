@@ -77,6 +77,7 @@ Removes the `dist/` directory.
   - `off` — extension does nothing on this site
   - `on` — manual mode: shows the floating control bar, no auto-translate on load. Click **Translate** to translate, then the observer starts so lazily-loaded content auto-translates
   - `auto` — auto-translates on load and observes dynamic (SPA) content
+- For `on`/`auto` sites the extension injects `<meta name="google" content="notranslate">` to suppress Google Translate / Chrome's built-in translator so they don't conflict with our translation
 - Priority rules: CSS selector → priority number, matched via `el.closest()`
 
 ### Translation Cache
