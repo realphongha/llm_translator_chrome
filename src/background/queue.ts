@@ -75,7 +75,7 @@ export function onQueueChanged(cb: QueueChangedCallback): void {
   queueChangedCallbacks.push(cb);
 }
 
-function emitResults(tabId: number, results: TranslationResult[]): void {
+export function emitResults(tabId: number, results: TranslationResult[]): void {
   for (const cb of resultCallbacks) cb(tabId, results);
 }
 

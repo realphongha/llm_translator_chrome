@@ -18,8 +18,9 @@ import {
   runQueue,
   onResults,
   onQueueChanged,
+  emitResults,
 } from "./queue";
-import { clearCache, getCacheStats, initCache, setCached } from "./cache";
+import { clearCache, getCacheStats, initCache, setCached, getCached } from "./cache";
 import { testApiConnection } from "./api";
 
 // ── Message types ─────────────────────────────
@@ -210,7 +211,45 @@ chrome.runtime.onMessage.addListener(
         switch (message.type) {
           case "ENQUEUE": {
             if (!tabId) break;
-            enqueue(tabId, message.items);
+
+            // Check cache immediately so cached translations don't wait in the queue
+            const session = await resolveSession(tabId);
+            const uncached: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean }> = [];
+            const cacheHits: Array<{ elementIndex: number; translation: string }> = [];
+
+            if (session) {
+              const checks = await Promise.all(
+                message.items.map(async (item) => {
+                  if (item.skipCache) return { item, cached: null };
+                  const cached = await getCached(session.systemPrompt, session.model, item.text);
+                  return { item, cached };
+                })
+              );
+              for (const { item, cached } of checks) {
+                if (cached !== null) {
+                  cacheHits.push({ elementIndex: item.elementIndex, translation: cached });
+                } else {
+                  uncached.push(item);
+                }
+              }
+            } else {
+              uncached.push(...message.items);
+            }
+
+            // Emit cache hits immediately
+            if (cacheHits.length > 0) {
+              emitResults(tabId, cacheHits.map((h) => ({
+                elementIndex: h.elementIndex,
+                translation: h.translation,
+                state: "translated" as const,
+              })));
+            }
+
+            // Only enqueue uncached items
+            if (uncached.length > 0) {
+              enqueue(tabId, uncached);
+            }
+
             // Auto-start if not already running
             startTranslation(tabId).catch(console.error);
             sendResponse({ ok: true });
