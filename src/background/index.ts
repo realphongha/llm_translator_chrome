@@ -12,6 +12,7 @@ import { getSystemPrompt } from "../prompts/builtins";
 import {
   enqueue,
   clearQueue,
+  removeTabQueue,
   resumeQueue,
   getQueueCount,
   isPaused,
@@ -90,6 +91,22 @@ onQueueChanged(async (tabId, count) => {
 
 const activeSessions = new Map<number, boolean>(); // tabId → running
 const pendingRetranslate = new Map<number, boolean>(); // tabId → a retranslate is queued until the current session ends
+
+const CACHE_CHECK_BATCH = 50; // max concurrent cache lookups at once
+
+async function runBatched<T, R>(
+  items: T[],
+  batchSize: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(fn));
+    results.push(...batchResults);
+  }
+  return results;
+}
 
 /**
  * Resolves the system prompt and model for a tab, mirroring the resolution
@@ -218,12 +235,14 @@ chrome.runtime.onMessage.addListener(
             const cacheHits: Array<{ elementIndex: number; translation: string }> = [];
 
             if (session) {
-              const checks = await Promise.all(
-                message.items.map(async (item) => {
+              const checks = await runBatched(
+                message.items,
+                CACHE_CHECK_BATCH,
+                async (item) => {
                   if (item.skipCache) return { item, cached: null };
                   const cached = await getCached(session.systemPrompt, session.model, item.text);
                   return { item, cached };
-                })
+                }
               );
               for (const { item, cached } of checks) {
                 if (cached !== null) {
@@ -375,6 +394,7 @@ chrome.runtime.onMessage.addListener(
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   clearQueue(tabId);
+  removeTabQueue(tabId);
   activeSessions.delete(tabId);
 });
 

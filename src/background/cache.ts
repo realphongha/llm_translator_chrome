@@ -1,16 +1,10 @@
-// ─────────────────────────────────────────────
-//  Translation Cache
-//  Backed by chrome.storage.local with SHA-256 keys
-//  True LRU eviction + MB-based size limit
-// ─────────────────────────────────────────────
-
 import { hashForCache } from "../utils/hashing";
 
 const CACHE_PREFIX = "cache_";
 const MAX_CACHE_ENTRIES = 10_000;
 const CACHE_INDEX_KEY = "cache_index";
 
-let maxCacheBytes = 7 * 1024 * 1024; // default 7MB
+let maxCacheBytes = 7 * 1024 * 1024;
 
 interface CacheEntry {
   translation: string;
@@ -18,7 +12,7 @@ interface CacheEntry {
 }
 
 interface CacheIndex {
-  keys: string[]; // ordered by use (most recently used at end)
+  keys: string[];
 }
 
 export function initCache(maxMb: number): void {
@@ -47,6 +41,22 @@ function dropIndexCache(): void {
   _indexCache.index = null;
 }
 
+// ── Debounced index save ────────────────────────
+// Aggregates sequential index writes and flushes once, so rapid calls
+// (e.g. during batch translation) don't hammer chrome.storage.
+
+let _indexSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleIndexSave(): void {
+  if (_indexSaveTimer) return;
+  _indexSaveTimer = setTimeout(async () => {
+    _indexSaveTimer = null;
+    if (_indexCache.index) {
+      await saveCacheIndex(_indexCache.index);
+    }
+  }, 500);
+}
+
 /**
  * Retrieves a cached translation, or null if not found.
  * On hit, promotes the key to most-recently-used (true LRU).
@@ -69,8 +79,7 @@ export async function getCached(
   if (pos !== -1) {
     index.keys.splice(pos, 1);
     index.keys.push(key);
-    // Fire-and-forget index save (non-blocking)
-    saveCacheIndex(index).catch(() => {});
+    scheduleIndexSave();
   }
 
   return entry.translation;
@@ -111,32 +120,33 @@ export async function setCached(
     await chrome.storage.local.remove(keysToRemove);
   }
 
-  // Evict by byte size: check total cache storage and evict oldest until under limit
-  const cacheStorageKeys = index.keys.map((k) => CACHE_PREFIX + k);
-  const bytesInUse = await chrome.storage.local.getBytesInUse(cacheStorageKeys);
-  if (bytesInUse > maxCacheBytes) {
-    const toRemove: string[] = [];
-    let freed = 0;
-    for (const k of index.keys) {
-      if (bytesInUse - freed <= maxCacheBytes) break;
-      const sk = CACHE_PREFIX + k;
-      const entryBytes = await chrome.storage.local.getBytesInUse(sk);
-      toRemove.push(sk);
-      freed += entryBytes;
-    }
-    if (toRemove.length > 0) {
-      await chrome.storage.local.remove(toRemove);
-      index.keys = index.keys.slice(toRemove.length);
+  // Evict by byte size: use a single getBytesInUse call and estimate
+  // per-entry size by average to avoid N+1 storage queries.
+  if (index.keys.length > 0) {
+    const cacheStorageKeys = index.keys.map((k) => CACHE_PREFIX + k);
+    const bytesInUse = await chrome.storage.local.getBytesInUse(cacheStorageKeys);
+    if (bytesInUse > maxCacheBytes) {
+      const avgBytesPerEntry = Math.max(1, Math.round(bytesInUse / index.keys.length));
+      const toFree = bytesInUse - maxCacheBytes;
+      const toRemoveCount = Math.min(index.keys.length, Math.ceil(toFree / avgBytesPerEntry));
+      if (toRemoveCount > 0) {
+        const toEvict = index.keys.splice(0, toRemoveCount);
+        await chrome.storage.local.remove(toEvict.map((k) => CACHE_PREFIX + k));
+      }
     }
   }
 
-  await saveCacheIndex(index);
+  scheduleIndexSave();
 }
 
 /**
  * Clears the entire translation cache.
  */
 export async function clearCache(): Promise<void> {
+  if (_indexSaveTimer) {
+    clearTimeout(_indexSaveTimer);
+    _indexSaveTimer = null;
+  }
   const index = await loadIndex();
   const keysToRemove = index.keys.map((k) => CACHE_PREFIX + k);
   keysToRemove.push(CACHE_INDEX_KEY);

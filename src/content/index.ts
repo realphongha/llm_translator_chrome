@@ -14,6 +14,7 @@ import {
   ATTR_STATE,
   ATTR_PRIORITY,
 } from "./extractor";
+import type { ExtractedNode } from "./extractor";
 import { applyTranslations, applyTranslation, injectStyles, markElementsTranslating, revertTranslatingElement, toggleOriginal, toggleAllOriginal } from "./renderer";
 import type { SiteConfig, PriorityRule } from "../storage/config";
 import type { TranslationResult } from "../background/queue";
@@ -123,7 +124,7 @@ async function init(autoTranslate = true): Promise<void> {
  */
 async function translateAll(skipCache = false): Promise<void> {
   if (!siteConfig) return;
-  const allNodes = extractTranslatableNodes(
+  const allNodes = await extractTranslatableNodes(
     document,
     siteConfig.selector || "",
     siteConfig.ignore || [],
@@ -235,7 +236,7 @@ function hideFloatingBar(): void {
 async function handleNewNodes(addedElements: Element[]): Promise<void> {
   if (!siteConfig || mode === "off") return;
 
-  const newNodes: ReturnType<typeof extractTranslatableNodes> = [];
+  const newNodes: ExtractedNode[] = [];
 
   for (const root of addedElements) {
     if (
@@ -243,7 +244,7 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
       root.textContent?.trim() &&
       !root.querySelector("[" + ATTR_TRANSLATION_ID + "]")
     ) {
-      const extracted = extractTranslatableNodes(
+      const extracted = await extractTranslatableNodes(
         root,
         siteConfig.selector || "",
         siteConfig.ignore || [],
@@ -259,7 +260,7 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
 }
 
 async function enqueueNodes(
-  nodes: ReturnType<typeof extractTranslatableNodes>,
+  nodes: ExtractedNode[],
   skipCache = false
 ): Promise<void> {
   if (nodes.length === 0) return;
@@ -317,7 +318,7 @@ function scheduleCleanup(): void {
     // our wrapper) and store it as a bogus data-original.
     const stuck = document.querySelectorAll(`[${ATTR_STATE}="translating"]`);
     if (stuck.length > 0 && siteConfig) {
-      const nodes: ReturnType<typeof extractTranslatableNodes> = [];
+      const nodes: ExtractedNode[] = [];
       for (const el of stuck) {
         const idxAttr = el.getAttribute(ATTR_TRANSLATION_ID);
         if (!idxAttr) continue;
@@ -694,9 +695,13 @@ function showTooltip(el: Element): void {
   scheduleHideTooltip(3000);
 }
 
+let _tooltipThrottle: ReturnType<typeof setTimeout> | null = null;
+
 document.addEventListener("mouseover", (e) => {
   const el = (e.target as Element).closest(`[${ATTR_TRANSLATION_ID}]`);
   if (el) {
+    if (_tooltipThrottle) return;
+    _tooltipThrottle = setTimeout(() => { _tooltipThrottle = null; }, 150);
     showTooltip(el);
   } else if (_tooltipEl && !_tooltipEl.contains(e.target as Node)) {
     scheduleHideTooltip(3000);

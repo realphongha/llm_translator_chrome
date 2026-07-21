@@ -122,6 +122,10 @@ export function clearQueue(tabId: number): void {
   }
 }
 
+export function removeTabQueue(tabId: number): void {
+  tabQueues.delete(tabId);
+}
+
 export function resumeQueue(tabId: number): void {
   const queue = tabQueues.get(tabId);
   if (queue) {
@@ -375,31 +379,39 @@ export async function runQueue(
   queue.processing = true;
   queue.activeItemsCount = 0;
 
+  // Completion-waiter: when any active task finishes, all pending waiters
+  // are resolved so the dispatch loop can refill immediately.
+  let waiterResolve: (() => void) | null = null;
+  let waiterPromise = Promise.resolve();
+
+  function signalCompletion(): void {
+    const r = waiterResolve;
+    waiterResolve = null;
+    r?.();
+  }
+
   try {
     const parallelLimit = apiConfig.parallelCalls;
     const maxChunk = apiConfig.chunkSize;
-    const active: Promise<void>[] = [];
+    let activeCount = 0;
 
-    while (queue.items.length > 0 || active.length > 0) {
-      if (queue.paused) {
-        await new Promise((r) => setTimeout(r, 200));
-        continue;
-      }
-
+    while (queue.items.length > 0 || activeCount > 0) {
       // Fill up to parallel limit
-      while (queue.items.length > 0 && active.length < parallelLimit) {
+      while (queue.items.length > 0 && activeCount < parallelLimit) {
         // Take a chunk of items, capped at chunkSize so each worker only
         // sends a small batch — results trickle in as workers finish
         const chunkSize = Math.min(
-          Math.ceil(queue.items.length / Math.max(1, parallelLimit - active.length)),
+          Math.ceil(queue.items.length / Math.max(1, parallelLimit - activeCount)),
           maxChunk
         );
         const chunk = queue.items.splice(0, Math.max(1, chunkSize));
-        
-        queue.activeItemsCount += chunk.length;
+        const chunkLen = chunk.length;
+
+        activeCount += chunkLen;
+        queue.activeItemsCount += chunkLen;
         emitQueueChanged(tabId, queue.items.length + queue.activeItemsCount);
 
-        const task = processWithCache(
+        processWithCache(
           chunk,
           systemPrompt,
           apiConfig,
@@ -415,20 +427,16 @@ export async function runQueue(
             console.error("[LLM Translator] Queue worker error:", err);
           })
           .finally(() => {
-            queue.activeItemsCount = Math.max(0, queue.activeItemsCount - chunk.length);
+            activeCount = Math.max(0, activeCount - chunkLen);
+            queue.activeItemsCount = Math.max(0, queue.activeItemsCount - chunkLen);
             emitQueueChanged(tabId, queue.items.length + queue.activeItemsCount);
+            signalCompletion();
           });
-
-        const taskWithCleanup = task.then(() => {
-          const idx = active.indexOf(taskWithCleanup);
-          if (idx !== -1) active.splice(idx, 1);
-        });
-
-        active.push(taskWithCleanup);
       }
 
-      if (active.length > 0) {
-        await Promise.race(active);
+      if (activeCount > 0) {
+        waiterPromise = new Promise<void>((r) => { waiterResolve = r; });
+        await waiterPromise;
       }
     }
   } finally {

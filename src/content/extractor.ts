@@ -17,6 +17,12 @@ const SKIP_TAGS = new Set([
   "MATH", "HEAD", "LINK", "META", "TITLE",
 ]);
 
+const CHUNK_SIZE = 200;
+
+function yieldToMain(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 export interface ExtractedNode {
   elementIndex: number;
   text: string;
@@ -32,7 +38,33 @@ let _extractionCounter = 0;
 // already-translated text left behind after a framework re-render (e.g. Vue
 // discarding our wrapper span) is recognized and re-attached with the correct
 // data-original instead of being re-sent to the LLM as a fresh original.
-const _translationMemory = new Map<string, string>();
+
+const MAX_MEMORY_ENTRIES = 10_000;
+
+class BoundedMap {
+  private map = new Map<string, string>();
+  constructor(private max: number) {}
+  get(key: string): string | undefined {
+    if (!this.map.has(key)) return undefined;
+    const value = this.map.get(key)!;
+    this.map.delete(key);
+    this.map.set(key, value);
+    return value;
+  }
+  set(key: string, value: string): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.max) {
+      const first = this.map.keys().next().value;
+      if (first !== undefined) this.map.delete(first);
+    }
+    this.map.set(key, value);
+  }
+  clear(): void { this.map.clear(); }
+  get size(): number { return this.map.size; }
+}
+
+const _translationMemory = new BoundedMap(MAX_MEMORY_ENTRIES);
 
 export function rememberTranslation(original: string, translated: string): void {
   if (!original || !translated) return;
@@ -45,6 +77,7 @@ export function lookupOriginal(translated: string): string | undefined {
 
 export function clearTranslationMemory(): void {
   _translationMemory.clear();
+  _extractionCounter = 0;
 }
 
 export function isTranslated(el: Element): boolean {
@@ -89,6 +122,10 @@ function computePriority(el: Element, priorityRules: PriorityRule[]): number {
 /**
  * Extracts all translatable text nodes from the root.
  *
+ * Phase 1: Pre-collect all qualifying text nodes (read-only, fast TreeWalker).
+ * Phase 2: Process in chunks, yielding to the event loop between chunks,
+ *          so the main thread stays responsive.
+ *
  * Each text node is wrapped in a <span data-translation-id="N">
  * so that translations can be applied without destroying child elements.
  *
@@ -98,12 +135,12 @@ function computePriority(el: Element, priorityRules: PriorityRule[]): number {
  * @param ignoreSelectors - CSS selectors for elements to ignore
  * @param priorityRules - Rules for assigning translation priority
  */
-export function extractTranslatableNodes(
+export async function extractTranslatableNodes(
   root: Element | Document,
   selector: string,
   ignoreSelectors: string[],
   priorityRules: PriorityRule[] = []
-): ExtractedNode[] {
+): Promise<ExtractedNode[]> {
   const results: ExtractedNode[] = [];
 
   const scopes: Element[] = [];
@@ -118,31 +155,51 @@ export function extractTranslatableNodes(
     if (body) scopes.push(body);
   }
 
+  // ── Phase 1: Pre-collect text nodes (read-only, no DOM mutations) ───
+
+  const pending: Array<{
+    textNode: Text;
+    raw: string;
+    knownOriginal: string | undefined;
+    priority: number;
+  }> = [];
+
   const seen = new Set<Node>();
 
   for (const scope of scopes) {
-    const textNodes: Text[] = [];
     const walker = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const tn = walker.currentNode as Text;
-      if (!seen.has(tn)) {
-        seen.add(tn);
-        textNodes.push(tn);
-      }
-    }
+      if (seen.has(tn)) continue;
+      seen.add(tn);
 
-    for (const textNode of textNodes) {
-      const raw = (textNode.textContent ?? "").replace(/ ⟳$/, "");
+      const raw = (tn.textContent ?? "").replace(/ ⟳$/, "");
       const trimmed = raw.trim();
       if (trimmed.length <= 0) continue;
       if (!/\p{L}/u.test(trimmed)) continue;
-      if (isInSkippedContext(textNode, ignoreSelectors)) continue;
+      if (isInSkippedContext(tn, ignoreSelectors)) continue;
 
-      // If this text is already one of our translations (left behind after a
-      // framework re-render dropped our wrapper span), re-attach it with the
-      // correct original instead of re-translating it as a fresh source.
+      // Compute priority from the parent element *before* replacing the text
+      // node — the parent is already in the DOM so el.closest() works correctly.
+      // A freshly-created span that hasn't been inserted yet would always return
+      // null from closest(), making every node get priority = Infinity.
+      const priority = computePriority(tn.parentElement!, priorityRules);
+
       const knownOriginal = lookupOriginal(trimmed);
+
+      pending.push({ textNode: tn, raw, knownOriginal, priority });
+    }
+  }
+
+  // ── Phase 2: Process in chunks (DOM mutations, yields between chunks) ───
+
+  for (let i = 0; i < pending.length; i += CHUNK_SIZE) {
+    const chunk = pending.slice(i, i + CHUNK_SIZE);
+
+    for (const { textNode, raw, knownOriginal, priority } of chunk) {
       if (knownOriginal !== undefined) {
+        // Text left behind after a framework re-render — re-attach with the
+        // correct original instead of re-translating it as a fresh source.
         const idx = ++_extractionCounter;
         const span = document.createElement("span");
         span.setAttribute(ATTR_TRANSLATION_ID, String(idx));
@@ -150,18 +207,10 @@ export function extractTranslatableNodes(
         span.setAttribute(ATTR_STATE, "translated");
         span.textContent = raw;
         textNode.parentNode!.replaceChild(span, textNode);
-        // Do NOT add to results — no LLM call needed; it's already translated.
         continue;
       }
 
       const idx = ++_extractionCounter;
-
-      // Compute priority from the parent element *before* replacing the text
-      // node — the parent is already in the DOM so el.closest() works correctly.
-      // A freshly-created span that hasn't been inserted yet would always return
-      // null from closest(), making every node get priority = Infinity.
-      const priority = computePriority(textNode.parentElement!, priorityRules);
-
       const span = document.createElement("span");
       span.setAttribute(ATTR_TRANSLATION_ID, String(idx));
       span.setAttribute(ATTR_ORIGINAL, raw);
@@ -181,6 +230,8 @@ export function extractTranslatableNodes(
         priority,
       });
     }
+
+    await yieldToMain();
   }
 
   return results;
