@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LLM Page Translator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Translate webpages using any OpenAI-compatible API. Supports local models and cloud providers.",
   "permissions": [
     "storage",

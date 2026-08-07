@@ -172,8 +172,7 @@ Removes the `dist/` directory.
 ├── esbuild.config.mjs
 ├── tsconfig.json
 ├── package.json
-├── README.md
-└── v0.1.0_plan.md
+└── README.md
 ```
 
 ## Configuration

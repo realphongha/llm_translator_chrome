@@ -402,11 +402,11 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === "install") {
-    console.log("[LLM Translator] Installed v0.1.0");
+    console.log("[LLM Translator] Installed");
     // Open options on first install
     await chrome.runtime.openOptionsPage();
   } else if (details.reason === "update") {
-    console.log("[LLM Translator] Updated to v0.1.0");
+    console.log("[LLM Translator] Updated");
   }
 });
 
