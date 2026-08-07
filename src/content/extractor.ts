@@ -9,6 +9,12 @@ export const ATTR_ORIGINAL = "data-original";
 export const ATTR_STATE = "data-translation-state";
 export const ATTR_PRIORITY = "data-priority";
 
+// Virtual targets (page title / tooltip title attributes) are not DOM text
+// nodes, so originals/translations are stashed on the target element itself.
+export const ATTR_ORIGINAL_TITLE = "data-llt-original-title";
+export const ATTR_TRANSLATED_TITLE = "data-llt-translated-title";
+export const ATTR_TTL_MODIFIED = "data-llt-tooltip";
+
 import type { PriorityRule } from "../storage/config";
 
 const SKIP_TAGS = new Set([
@@ -31,6 +37,32 @@ export interface ExtractedNode {
 }
 
 let _extractionCounter = 0;
+
+// ── Virtual targets (page title + tooltip titles) ──
+// Keyed by the same elementIndex counter used for text spans, so results from
+// the background flow back through the normal renderer path. The renderer
+// consults this registry before treating the index as a DOM text span.
+
+export interface VirtualTarget {
+  kind: "title" | "attr";
+  el?: Element;
+  attr?: string;
+}
+
+const _virtualTargets = new Map<number, VirtualTarget>();
+let _titleIndex: number | null = null;
+
+export function getVirtualTarget(index: number): VirtualTarget | null {
+  return _virtualTargets.get(index) ?? null;
+}
+
+export function isVirtualNode(index: number): boolean {
+  return _virtualTargets.has(index);
+}
+
+export function allVirtualTargets(): Array<[number, VirtualTarget]> {
+  return Array.from(_virtualTargets.entries());
+}
 
 // ── In-session translation memory ──────────────
 // Maps a translated string back to its original source text. Populated when a
@@ -258,4 +290,140 @@ export function restoreOriginals(): void {
       el.removeAttribute(ATTR_STATE);
     }
   }
+}
+
+// ── Virtual targets (page title + tooltips) ───
+
+// The extension's own UI must never be treated as a tooltip to translate.
+const EXTENSION_UI_SELECTORS = [
+  "#llt-floating-bar",
+  "#llt-tooltip",
+  "#llt-bar-tooltip",
+];
+
+function isExtensionTooltip(el: Element): boolean {
+  for (const sel of EXTENSION_UI_SELECTORS) {
+    try {
+      if (el.closest(sel)) return true;
+    } catch {
+    }
+  }
+  try {
+    if (el.closest(".llt-state")) return true;
+  } catch {
+  }
+  return false;
+}
+
+/**
+ * Extracts the current page title (shown in the tab) as a virtual target.
+ * No-op unless the title actually changed from what we last recorded, so it can
+ * be called on every scan (including SPA navigation) without re-translating.
+ */
+export function extractPageTitle(ignoreSelectors: string[]): ExtractedNode | null {
+  const titleEl = document.querySelector("title");
+  if (!titleEl) return null;
+
+  const current = (document.title ?? "").trim();
+  if (!current || !/\p{L}/u.test(current)) return null;
+
+  const original = titleEl.getAttribute(ATTR_ORIGINAL_TITLE);
+  const translated = titleEl.getAttribute(ATTR_TRANSLATED_TITLE);
+  if (original !== null) {
+    if (current === original || current === translated) return null;
+    // The site replaced the title (e.g. SPA navigation) — re-register it.
+    titleEl.removeAttribute(ATTR_ORIGINAL_TITLE);
+    titleEl.removeAttribute(ATTR_TRANSLATED_TITLE);
+    titleEl.removeAttribute(ATTR_STATE);
+    titleEl.removeAttribute("data-showing-original");
+    if (_titleIndex !== null) _virtualTargets.delete(_titleIndex);
+    _titleIndex = null;
+  }
+
+  const idx = ++_extractionCounter;
+  _titleIndex = idx;
+  titleEl.setAttribute(ATTR_ORIGINAL_TITLE, current);
+  _virtualTargets.set(idx, { kind: "title", el: titleEl });
+
+  return { elementIndex: idx, text: current, element: titleEl, priority: 1 };
+}
+
+/**
+ * Extracts every element with a non-empty `title` attribute (native hover
+ * tooltips) as a virtual target, excluding the extension's own UI and content
+ * that is already part of the text pipeline.
+ */
+export function extractTooltipTargets(
+  root: Element | Document,
+  ignoreSelectors: string[]
+): ExtractedNode[] {
+  const results: ExtractedNode[] = [];
+  const body = root instanceof Document ? root.body : root;
+  if (!body) return results;
+
+  const els = body.querySelectorAll<Element>("[title]");
+  for (const el of els) {
+    if (el.hasAttribute(ATTR_TTL_MODIFIED)) continue;
+    if (el.hasAttribute(ATTR_TRANSLATION_ID)) continue;
+    if (el.closest(`[${ATTR_TRANSLATION_ID}]`)) continue;
+    if (isExtensionTooltip(el)) continue;
+    if (isIgnored(el, ignoreSelectors)) continue;
+
+    const title = (el.getAttribute("title") ?? "").trim();
+    if (!title || !/\p{L}/u.test(title)) continue;
+
+    const idx = ++_extractionCounter;
+    el.setAttribute(ATTR_TTL_MODIFIED, "true");
+    el.setAttribute(ATTR_ORIGINAL_TITLE, title);
+    _virtualTargets.set(idx, { kind: "attr", el, attr: "title" });
+
+    results.push({ elementIndex: idx, text: title, element: el, priority: Infinity });
+  }
+  return results;
+}
+
+/**
+ * Extracts both the page title and tooltip title attributes within root.
+ */
+export function extractTitleAndTooltips(
+  root: Element | Document,
+  ignoreSelectors: string[]
+): ExtractedNode[] {
+  const results: ExtractedNode[] = [];
+  const titleNode = extractPageTitle(ignoreSelectors);
+  if (titleNode) results.push(titleNode);
+  results.push(...extractTooltipTargets(root, ignoreSelectors));
+  return results;
+}
+
+/**
+ * Restores the page title and every tooltip title attribute back to their
+ * originals and clears the virtual-target registry. Used by Retranslate/revert.
+ */
+export function restoreVirtualTargets(): void {
+  const titleEl = document.querySelector("title");
+  if (titleEl) {
+    const original = titleEl.getAttribute(ATTR_ORIGINAL_TITLE);
+    if (original !== null) document.title = original;
+    titleEl.removeAttribute(ATTR_ORIGINAL_TITLE);
+    titleEl.removeAttribute(ATTR_TRANSLATED_TITLE);
+    titleEl.removeAttribute(ATTR_STATE);
+    titleEl.removeAttribute("data-showing-original");
+  }
+
+  for (const [, target] of _virtualTargets) {
+    if (target.kind === "attr" && target.el) {
+      const attr = target.attr!;
+      const original = target.el.getAttribute(ATTR_ORIGINAL_TITLE);
+      if (original !== null) target.el.setAttribute(attr, original);
+      target.el.removeAttribute(ATTR_ORIGINAL_TITLE);
+      target.el.removeAttribute(ATTR_TRANSLATED_TITLE);
+      target.el.removeAttribute(ATTR_TTL_MODIFIED);
+      target.el.removeAttribute(ATTR_STATE);
+      target.el.removeAttribute("data-showing-original");
+    }
+  }
+
+  _virtualTargets.clear();
+  _titleIndex = null;
 }

@@ -5,8 +5,13 @@
 import { DOMObserver } from "./observer";
 import {
   extractTranslatableNodes,
+  extractTitleAndTooltips,
+  extractTooltipTargets,
+  extractPageTitle,
   restoreOriginals,
+  restoreVirtualTargets,
   isTranslated,
+  isVirtualNode,
   clearTranslationMemory,
   lookupOriginal,
   ATTR_TRANSLATION_ID,
@@ -43,6 +48,7 @@ async function reloadAndRetranslate(): Promise<void> {
     cancelCleanup();
     observer?.stop();
     restoreOriginals();
+    restoreVirtualTargets();
     clearTranslationMemory();
     pendingIndices.clear();
     // Rebuild config/observer/bar without auto-translating, then force a fresh
@@ -130,6 +136,10 @@ async function translateAll(skipCache = false): Promise<void> {
     siteConfig.ignore || [],
     siteConfig.priorityRules || []
   );
+
+  // Page title (tab) and tooltip title attributes flow through the same queue
+  // but are applied as attributes rather than text.
+  allNodes.push(...extractTitleAndTooltips(document, siteConfig.ignore || []));
 
   // Enqueue all elements together so the background queue has the full set of
   // nodes to sort and prioritize. Streaming to the user is handled incrementally
@@ -252,7 +262,14 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
       );
       newNodes.push(...extracted);
     }
+    // Tooltips on newly added elements / after SPA navigation.
+    newNodes.push(...extractTooltipTargets(root, siteConfig.ignore || []));
   }
+
+  // Re-check the tab title — no-op unless the title actually changed
+  // (e.g. SPA navigation replaced it with a new value).
+  const titleNode = extractPageTitle(siteConfig.ignore || []);
+  if (titleNode) newNodes.push(titleNode);
 
   if (newNodes.length > 0) {
     await enqueueNodes(newNodes);
@@ -267,8 +284,17 @@ async function enqueueNodes(
 
   const indices = nodes.map((n) => n.elementIndex);
 
-  // Mark as translating
-  markElementsTranslating(indices);
+  // Virtual targets (page title / tooltip titles) must not be marked "translating"
+  // — that appends a spinner indicator to their DOM element.
+  const virtualSet = new Set(
+    nodes.filter((n) => isVirtualNode(n.elementIndex)).map((n) => n.elementIndex)
+  );
+  const textNodes = nodes.filter((n) => !virtualSet.has(n.elementIndex));
+
+  // Mark as translating (text spans only)
+  if (textNodes.length > 0) {
+    markElementsTranslating(textNodes.map((n) => n.elementIndex));
+  }
 
   const items = nodes.map((n) => ({
     text: n.text,
@@ -286,6 +312,7 @@ async function enqueueNodes(
     console.warn(`[LLM Translator] Failed to enqueue ${indices.length} items: ${response.error}`);
     for (const node of nodes) {
       pendingIndices.delete(node.elementIndex);
+      if (isVirtualNode(node.elementIndex)) continue;
       revertTranslatingElement(node.element);
     }
   }

@@ -7,9 +7,14 @@ import {
   ATTR_ORIGINAL,
   ATTR_STATE,
   ATTR_TRANSLATION_ID,
+  ATTR_ORIGINAL_TITLE,
+  ATTR_TRANSLATED_TITLE,
   findElementByIndex,
+  getVirtualTarget,
+  allVirtualTargets,
   rememberTranslation,
 } from "./extractor";
+import type { VirtualTarget } from "./extractor";
 import type { TranslationResult } from "../background/queue";
 
 /**
@@ -26,6 +31,16 @@ export function markTranslating(el: Element): void {
  * Stores the original text in data-original for retranslation.
  */
 export function applyTranslation(result: TranslationResult): void {
+  // Virtual targets (page title + tooltip title attributes) have no
+  // data-translation-id in the DOM, so resolve them before findElementByIndex.
+  const virtual = getVirtualTarget(result.elementIndex);
+  if (virtual) {
+    if (result.state === "translated" && result.translation) {
+      applyVirtualTranslation(virtual, result.translation);
+    }
+    return;
+  }
+
   const el = findElementByIndex(result.elementIndex);
   if (!el) {
     return;
@@ -47,6 +62,23 @@ export function applyTranslation(result: TranslationResult): void {
   } else if (result.state === "error") {
     el.setAttribute(ATTR_STATE, "error");
     ensureStateIndicator(el, "error");
+  }
+}
+
+/**
+ * Applies a translation to a virtual target (page title or tooltip attribute).
+ */
+function applyVirtualTranslation(target: VirtualTarget, translation: string): void {
+  const el = target.el;
+  if (!el) return;
+  if (target.kind === "title") {
+    el.setAttribute(ATTR_TRANSLATED_TITLE, translation);
+    document.title = translation;
+    el.setAttribute(ATTR_STATE, "translated");
+  } else {
+    const attr = target.attr ?? "title";
+    el.setAttribute(attr, translation);
+    el.setAttribute(ATTR_STATE, "translated");
   }
 }
 
@@ -159,7 +191,65 @@ export function toggleAllOriginal(): boolean {
     }
   }
 
+  // Virtual targets: page title + tooltip title attributes.
+  for (const [, target] of allVirtualTargets()) {
+    if (target.kind === "title") {
+      toggleTitleTarget(target, showingOriginal);
+    } else {
+      toggleAttrTarget(target, showingOriginal);
+    }
+  }
+
   return !showingOriginal;
+}
+
+/**
+ * Swaps a tooltip title attribute between translated and original text.
+ */
+function toggleAttrTarget(target: VirtualTarget, showingOriginal: boolean): void {
+  const el = target.el;
+  const attr = target.attr ?? "title";
+  if (!el) return;
+
+  if (showingOriginal) {
+    const translated = el.getAttribute(ATTR_TRANSLATED_TITLE);
+    if (translated != null) el.setAttribute(attr, translated);
+    el.removeAttribute(ATTR_TRANSLATED_TITLE);
+    el.removeAttribute("data-showing-original");
+    el.setAttribute(ATTR_STATE, "translated");
+  } else {
+    const original = el.getAttribute(ATTR_ORIGINAL_TITLE);
+    const current = el.getAttribute(attr) || "";
+    if (original == null || current === original) return;
+    el.setAttribute(ATTR_TRANSLATED_TITLE, current);
+    el.setAttribute(attr, original);
+    el.setAttribute("data-showing-original", "true");
+    el.setAttribute(ATTR_STATE, "waiting");
+  }
+}
+
+/**
+ * Swaps the page title (tab name) between translated and original text.
+ */
+function toggleTitleTarget(target: VirtualTarget, showingOriginal: boolean): void {
+  const el = target.el;
+  if (!el) return;
+
+  if (showingOriginal) {
+    const translated = el.getAttribute(ATTR_TRANSLATED_TITLE);
+    if (translated != null) document.title = translated;
+    el.removeAttribute(ATTR_TRANSLATED_TITLE);
+    el.removeAttribute("data-showing-original");
+    el.setAttribute(ATTR_STATE, "translated");
+  } else {
+    const original = el.getAttribute(ATTR_ORIGINAL_TITLE);
+    const current = document.title || "";
+    if (original == null || current === original) return;
+    el.setAttribute(ATTR_TRANSLATED_TITLE, current);
+    document.title = original;
+    el.setAttribute("data-showing-original", "true");
+    el.setAttribute(ATTR_STATE, "waiting");
+  }
 }
 
 /**
