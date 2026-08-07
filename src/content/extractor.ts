@@ -133,6 +133,7 @@ function isInSkippedContext(node: Text, ignoreSelectors: string[]): boolean {
     if (SKIP_TAGS.has(el.tagName)) return true;
     if (isIgnored(el, ignoreSelectors)) return true;
     if (el.hasAttribute(ATTR_TRANSLATION_ID)) return true;
+    if (isExtensionUi(el)) return true;
     el = el.parentElement;
   }
   return false;
@@ -294,14 +295,16 @@ export function restoreOriginals(): void {
 
 // ── Virtual targets (page title + tooltips) ───
 
-// The extension's own UI must never be treated as a tooltip to translate.
+// The extension's own UI must never be treated as a translation target —
+// neither as a tooltip title attribute nor as translatable body text.
 const EXTENSION_UI_SELECTORS = [
   "#llt-floating-bar",
   "#llt-tooltip",
   "#llt-bar-tooltip",
+  "#llt-detail",
 ];
 
-function isExtensionTooltip(el: Element): boolean {
+function isExtensionUi(el: Element): boolean {
   for (const sel of EXTENSION_UI_SELECTORS) {
     try {
       if (el.closest(sel)) return true;
@@ -313,6 +316,10 @@ function isExtensionTooltip(el: Element): boolean {
   } catch {
   }
   return false;
+}
+
+function isExtensionTooltip(el: Element): boolean {
+  return isExtensionUi(el);
 }
 
 /**

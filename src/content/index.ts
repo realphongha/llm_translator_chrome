@@ -47,6 +47,7 @@ async function reloadAndRetranslate(): Promise<void> {
   try {
     cancelCleanup();
     observer?.stop();
+    hideDetailBox();
     restoreOriginals();
     restoreVirtualTargets();
     clearTranslationMemory();
@@ -239,6 +240,7 @@ function hideFloatingBar(): void {
   floatingBar = null;
   floatingTooltip?.remove();
   floatingTooltip = null;
+  hideDetailBox();
 }
 
 // ── Node handling ─────────────────────────────
@@ -666,7 +668,7 @@ function scheduleHideTooltip(delay: number): void {
   _tooltipTimer = setTimeout(hideTooltip, delay);
 }
 
-function showTooltip(el: Element): void {
+function showTooltip(el: Element, clientX: number, clientY: number): void {
   // Same element → just refresh timer
   if (_tooltipTarget === el) {
     scheduleHideTooltip(3000);
@@ -676,14 +678,18 @@ function showTooltip(el: Element): void {
   hideTooltip();
   _tooltipTarget = el;
 
-  const rect = el.getBoundingClientRect();
   const t = document.createElement("div");
   _tooltipEl = t;
   t.id = "llt-tooltip";
+  // Anchor near the mouse so it appears beside the visible "…" even when the
+  // paragraph's text is CSS-clipped (getBoundingClientRect would report the
+  // full untruncated width, pushing the bar too far right).
+  const left = Math.min(clientX + 12, window.innerWidth - 180);
+  const top = Math.max(clientY + 12, 8);
   t.style.cssText = `
     position: fixed; z-index: 2147483647;
-    left: ${Math.min(rect.right + 6, window.innerWidth - 160)}px;
-    top: ${rect.top}px;
+    left: ${left}px;
+    top: ${top}px;
     background: #1c1f28; border: 1px solid rgba(255,255,255,0.10);
     border-radius: 8px; padding: 1px;
     box-shadow: 0 6px 24px rgba(0,0,0,0.5);
@@ -716,6 +722,7 @@ function showTooltip(el: Element): void {
   addBtn("\u21BB", "Retranslate", () => { hideTooltip(); retranslateElement(el, false); });
   addBtn("\u270E", "Retranslate with Comment", () => { hideTooltip(); retranslateElement(el, true); });
   addBtn("\u270D", "Translate Manually", () => { hideTooltip(); manualTranslateElement(el); });
+  addBtn("\u{1F4CB}", "View original & translation", () => { hideTooltip(); showDetailBox(el); });
   addBtn("\u2715", "Close", () => hideTooltip());
 
   document.body.appendChild(t);
@@ -729,11 +736,133 @@ document.addEventListener("mouseover", (e) => {
   if (el) {
     if (_tooltipThrottle) return;
     _tooltipThrottle = setTimeout(() => { _tooltipThrottle = null; }, 150);
-    showTooltip(el);
+    showTooltip(el, e.clientX, e.clientY);
   } else if (_tooltipEl && !_tooltipEl.contains(e.target as Node)) {
     scheduleHideTooltip(3000);
   }
 });
+
+// ── Original & translation detail box ──────────
+
+let _detailBoxEl: HTMLElement | null = null;
+
+function hideDetailBox(): void {
+  if (_detailBoxEl) {
+    _detailBoxEl.remove();
+    _detailBoxEl = null;
+    document.removeEventListener("keydown", onDetailKeydown);
+    document.removeEventListener("mousedown", onDetailMousedown);
+  }
+}
+
+function onDetailKeydown(e: KeyboardEvent): void {
+  if (e.key === "Escape") hideDetailBox();
+}
+
+function onDetailMousedown(e: MouseEvent): void {
+  if (_detailBoxEl && !_detailBoxEl.contains(e.target as Node)) hideDetailBox();
+}
+
+async function copyText(text: string, btn: HTMLButtonElement): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // Fallback for non-secure contexts
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch {}
+    ta.remove();
+  }
+  const original = btn.textContent;
+  btn.textContent = "Copied \u2713";
+  setTimeout(() => { btn.textContent = original; }, 1500);
+}
+
+function showDetailBox(el: Element): void {
+  hideDetailBox();
+
+  const original =
+    el.getAttribute(ATTR_ORIGINAL) ??
+    lookupOriginal((el.textContent ?? "").trim()) ??
+    "";
+  const translated = el.textContent ?? "";
+
+  const box = document.createElement("div");
+  _detailBoxEl = box;
+  box.id = "llt-detail";
+  box.style.cssText = `
+    position: fixed; z-index: 2147483647;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: min(720px, calc(100vw - 32px));
+    display: flex; flex-direction: column;
+    background: #1c1f28; border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px; padding: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    font-family: -apple-system, system-ui, sans-serif; color: #e6e8f0;
+    font-size: 13px; line-height: 1.5;
+  `;
+
+  const header = document.createElement("div");
+  header.style.cssText = `
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 14px; font-weight: 600; margin-bottom: 10px;
+  `;
+  header.textContent = "Original & Translation";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "\u2715";
+  closeBtn.title = "Close (Esc)";
+  closeBtn.style.cssText = "background:none;border:none;cursor:pointer;color:#c8cbd8;font-size:16px;line-height:1;padding:2px 6px;border-radius:4px;";
+  closeBtn.addEventListener("mouseenter", () => { closeBtn.style.background = "rgba(255,255,255,0.07)"; });
+  closeBtn.addEventListener("mouseleave", () => { closeBtn.style.background = "none"; });
+  closeBtn.addEventListener("click", hideDetailBox);
+  header.appendChild(closeBtn);
+
+  box.appendChild(header);
+
+  function addSection(label: string, text: string): void {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin:6px 0 4px;";
+
+    const lbl = document.createElement("span");
+    lbl.style.cssText = "font-weight:600;color:#9aa1b5;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;";
+    lbl.textContent = label;
+
+    const copy = document.createElement("button");
+    copy.textContent = "\u{1F4CB}";
+    copy.title = `Copy ${label.toLowerCase()}`;
+    copy.style.cssText = "background:none;border:none;cursor:pointer;color:#c8cbd8;font-size:14px;line-height:1;padding:2px 6px;border-radius:4px;";
+    copy.addEventListener("mouseenter", () => { copy.style.background = "rgba(255,255,255,0.07)"; });
+    copy.addEventListener("mouseleave", () => { copy.style.background = "none"; });
+    copy.addEventListener("click", () => { copyText(text, copy); });
+
+    row.appendChild(lbl);
+    row.appendChild(copy);
+
+    const body = document.createElement("div");
+    body.textContent = text || "(empty)";
+    body.style.cssText = `
+      background: #14161d; border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px; padding: 10px; margin-bottom: 6px;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 30vh; overflow-y: auto;
+      font-family: inherit; font-size: 13px; line-height: 1.5;
+    `;
+
+    box.appendChild(row);
+    box.appendChild(body);
+  }
+
+  addSection("Original", original);
+  addSection("Translated", translated);
+
+  document.body.appendChild(box);
+  document.addEventListener("keydown", onDetailKeydown);
+  document.addEventListener("mousedown", onDetailMousedown);
+}
 
 async function retranslateElement(el: Element, withComment: boolean): Promise<{ ok: boolean; error?: string }> {
   const idxAttr = el.getAttribute(ATTR_TRANSLATION_ID);
