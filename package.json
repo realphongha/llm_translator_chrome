@@ -1,6 +1,6 @@
 {
   "name": "llm-page-translator",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Chrome extension for translating webpages using any OpenAI-compatible API",
   "private": true,
   "scripts": {

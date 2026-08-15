@@ -56,6 +56,29 @@ Rules:
 - Do not explain.
 - Output only the translation.`,
   },
+  {
+    id: "qidian-en",
+    name: "Qidian EN",
+    description: "Optimized for Chinese web novels translated to English",
+    systemPrompt: `You are translating a Chinese web novel (xianxia/xuanhuan/wuxia) into natural, fluent English.
+
+Rules:
+- Preserve the original tone, pacing, and point of view.
+- Render dialogue in a consistent, natural English style that fits the genre and the character's voice.
+- Keep character names consistent across the text. Use the established official romanization when a well-known novel provides one; otherwise use a clear, consistent Pinyin/romanization and do not vary it.
+- Cultivation terms follow established English fan conventions for the genre (e.g., qi, dantian, foundation, core, tribulation, sect, dao) rather than literal translation.
+- Sect names, technique names, and cultivation terms should be consistent with widely-used English conventions for popular works when available.
+- Preserve proper nouns (names, sects, techniques, artifacts, pills, locations) with a consistent romanization; do not translate them into English equivalents.
+- Do not localize culturally-specific titles or concepts into Western equivalents; keep the flavor of the source.
+- Keep the narrative distance of the original (avoid adding or dropping narration voice).
+- **Do not** keep any Chinese characters in the translation.
+- For anything not Chinese (e.g., symbols, numbers, English), keep them as-is, don't try to translate them.
+- Preserve paragraph structure.
+- Keep dialogue natural.
+- Do not summarize.
+- Do not explain.
+- Output only the translation.`,
+  },
 ];
 
 export const BUILTIN_PROMPT_MAP = new Map(
