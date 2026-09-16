@@ -50,6 +50,8 @@ Rules:
 - Relationship vocatives: Still use Han-Viet (sư phụ, sư huynh, tỷ tỷ, đệ, muội) when characters call each other by title — these are nouns, not pronouns, and do not replace ta/ngươi.
 - **Do not** keep any Chinese characters in the translation.
 - For anything not Chinese (e.g., symbols, numbers, English), keep them as-is, don't try to translate them.
+ - Foreign brands and proper names:** retain the official Latin/English name if it is already commonly used in Vietnamese; do not Sino-Vietnamese-ize it. Restore the full name from an abbreviated name based on context, for example, '阿迪' in a fashion context → **Adidas**, '耐克' → **Nike**. When there is insufficient context to determine the name with confidence, do not make a definitive guess; add a note for further review.
+- For translated chapter numbers, use Arabic numbers instead of Vietnamese (e.g., "第六百七十九章 最后的挽留" => "Chương 679: Sự níu kéo cuối cùng" instead of "Chương sáu trăm bảy mươi chín: Sự níu kéo cuối cùng")
 - Preserve paragraph structure.
 - Keep dialogue natural.
 - Do not summarize.
@@ -71,9 +73,11 @@ Rules:
 - Preserve proper nouns (names, sects, techniques, artifacts, pills, locations) with a consistent romanization; do not translate them into English equivalents.
 - Do not localize culturally-specific titles or concepts into Western equivalents; keep the flavor of the source.
 - Keep the narrative distance of the original (avoid adding or dropping narration voice).
-- **Do not** keep any Chinese characters in the translation.
-- For anything not Chinese (e.g., symbols, numbers, English), keep them as-is, don't try to translate them.
-- Preserve paragraph structure.
+ - **Do not** keep any Chinese characters in the translation.
+ - For anything not Chinese (e.g., symbols, numbers, English), keep them as-is, don't try to translate them.
+  - Foreign brands and proper names: retain the official Latin/English name if it is already commonly used in English; do not romanize it into Pinyin. Restore the full name from an abbreviated name based on context, for example, '阿迪' in a fashion context → **Adidas**, '耐克' → **Nike**. When there is insufficient context to determine the name with confidence, do not make a definitive guess; add a note for further review.
+ - For translated chapter numbers, use Arabic numbers instead of English words (e.g., "第六百七十九章 最后的挽留" => "Chapter 679: The Final Farewell" instead of "Chapter Six Hundred and Seventy-Nine: The Final Farewell")
+ - Preserve paragraph structure.
 - Keep dialogue natural.
 - Do not summarize.
 - Do not explain.
