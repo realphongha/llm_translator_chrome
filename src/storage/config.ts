@@ -3,7 +3,10 @@
 //  All settings live in chrome.storage.local
 // ─────────────────────────────────────────────
 
+export type TranslationProvider = "custom" | "chrome-ai" | "chrome-translator";
+
 export interface ApiConfig {
+  provider?: TranslationProvider;
   base: string;
   key: string;
   model: string;
@@ -74,13 +77,17 @@ export interface SiteConfig {
 
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   api: {
+    provider: "custom",
     base: "",
     key: "",
     model: "",
     parallelCalls: 8,
     chunkSize: 8,
     timeout: 60,
-    temperature: 0.1,
+    temperature: 0.3,
+    top_p: 0.95,
+    top_k: 64,
+    chat_template_kwargs: { enable_thinking: false },
   },
   translation: {
     maxChars: 4000,

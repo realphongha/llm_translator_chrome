@@ -2,7 +2,7 @@
 //  Translation Queue & Parallel Worker Pool
 // ─────────────────────────────────────────────
 
-import { callChatCompletions, ApiError } from "./api";
+import { callTranslation, ApiError } from "./api";
 import { getCached, setCached } from "./cache";
 import { buildBatches } from "../utils/batching";
 import { buildUserPrompt } from "../prompts/builtins";
@@ -45,6 +45,8 @@ export interface BatchJob {
   apiConfig: ApiConfig;
   translationConfig: TranslationConfig;
   retryCount: number;
+  sourceLanguage?: string;
+  targetLanguage?: string;
 }
 
 // ── Queue state (per tab) ─────────────────────
@@ -171,10 +173,12 @@ async function processBatch(
 
     for (let attempt = 0; attempt <= job.retryCount; attempt++) {
       try {
-        const response = await callChatCompletions(
+        const response = await callTranslation(
           systemPrompt,
           userPrompt,
-          apiConfig
+          apiConfig,
+          job.sourceLanguage,
+          job.targetLanguage
         );
 
         const parsed = parseTranslationResponse(response);
@@ -284,6 +288,10 @@ async function processWithCache(
   systemPrompt: string,
   apiConfig: ApiConfig,
   translationConfig: TranslationConfig,
+
+
+  sourceLanguage?: string,
+  targetLanguage?: string,
   onPartialResults?: (results: TranslationResult[]) => void
 ): Promise<TranslationResult[]> {
   const results: TranslationResult[] = [];
@@ -326,6 +334,8 @@ async function processWithCache(
     apiConfig: effectiveApiConfig,
     translationConfig,
     retryCount: translationConfig.retryCount,
+    sourceLanguage,
+    targetLanguage,
   };
 
   // Track which items have already been emitted by onBatchDone
@@ -371,7 +381,9 @@ export async function runQueue(
   tabId: number,
   systemPrompt: string,
   apiConfig: ApiConfig,
-  translationConfig: TranslationConfig
+  translationConfig: TranslationConfig,
+  sourceLanguage?: string,
+  targetLanguage?: string
 ): Promise<void> {
   const queue = tabQueues.get(tabId);
   if (!queue || queue.processing) return;
@@ -391,7 +403,9 @@ export async function runQueue(
   }
 
   try {
-    const parallelLimit = apiConfig.parallelCalls;
+    const parallelLimit = (apiConfig.provider === "chrome-ai" || apiConfig.provider === "chrome-translator")
+      ? Math.min(apiConfig.parallelCalls, 4)
+      : apiConfig.parallelCalls;
     const maxChunk = apiConfig.chunkSize;
     let activeCount = 0;
 
@@ -416,6 +430,8 @@ export async function runQueue(
           systemPrompt,
           apiConfig,
           translationConfig,
+          sourceLanguage,
+          targetLanguage,
           // Stream partial results to the content script after each sub-batch
           (partialResults) => emitResults(tabId, partialResults)
         )

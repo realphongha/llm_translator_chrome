@@ -40,6 +40,14 @@ let cleanupTimer: ReturnType<typeof setTimeout> | null = null;
 let isReloading = false;
 let floatingBar: HTMLElement | null = null;
 let floatingTooltip: HTMLElement | null = null;
+let activeProvider = "custom";
+let activeModel = "";
+
+function getEngineLabel(): string {
+  if (activeProvider === "chrome-ai") return "Gemini Nano";
+  if (activeProvider === "chrome-translator") return "Fast Translator";
+  return activeModel || "Custom API";
+}
 
 async function reloadAndRetranslate(): Promise<void> {
   if (isReloading) return;
@@ -89,6 +97,9 @@ async function init(autoTranslate = true): Promise<void> {
 
   siteConfig = response.data as SiteConfig;
   mode = siteConfig.mode || "off";
+  activeProvider = (response as any).apiProvider || "custom";
+  activeModel = (response as any).apiModel || "";
+  console.log(`[LLM Translator] Engine active: ${getEngineLabel()} (${activeProvider})`);
 
   // Note: the <meta name="google" content="notranslate"> tag (to suppress
   // Chrome's built-in translator) is injected by the early document_start
@@ -206,9 +217,14 @@ function showFloatingBar(): void {
   translateBtn.textContent = "\u{1F310}";
   translateBtn.style.cssText = btnStyle + "background:#3b6ef0;";
   translateBtn.addEventListener("click", () => {
-    translateAll().then(() => observer?.start()).catch(console.error);
+    const existing = document.querySelectorAll("[data-translation-id]");
+    if (existing.length > 0) {
+      reloadAndRetranslate().catch(console.error);
+    } else {
+      translateAll().then(() => observer?.start()).catch(console.error);
+    }
   });
-  attachTooltip(translateBtn, () => "Translate");
+  attachTooltip(translateBtn, () => `Translate (${getEngineLabel()})`);
 
   const retranslateBtn = document.createElement("button");
   retranslateBtn.textContent = "\u21BB";
@@ -216,7 +232,7 @@ function showFloatingBar(): void {
   retranslateBtn.addEventListener("click", () => {
     reloadAndRetranslate().catch(console.error);
   });
-  attachTooltip(retranslateBtn, () => "Retranslate (fresh, ignores cache)");
+  attachTooltip(retranslateBtn, () => `Retranslate with ${getEngineLabel()} (fresh, ignores cache)`);
 
   let showingOriginal = false;
   const toggleBtn = document.createElement("button");
@@ -243,6 +259,89 @@ function hideFloatingBar(): void {
   hideDetailBox();
 }
 
+let errorToast: HTMLElement | null = null;
+let errorToastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function showErrorToast(msg: string): void {
+  errorToast?.remove();
+  if (errorToastTimeout) clearTimeout(errorToastTimeout);
+
+  const toast = document.createElement("div");
+  toast.id = "llt-error-toast";
+  toast.className = "notranslate llt-ui";
+  toast.setAttribute("translate", "no");
+  toast.style.cssText = `
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #191c24;
+    border: 1px solid rgba(240, 112, 112, 0.45);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: #e4e6f0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    z-index: 2147483647;
+    max-width: 380px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.25s ease;
+  `;
+
+  const header = document.createElement("div");
+  header.style.cssText = "display: flex; align-items: center; justify-content: space-between; font-weight: 600; color: #f87171;";
+  header.innerHTML = `
+    <span style="display:flex;align-items:center;gap:6px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      LLM Translator Notice
+    </span>
+  `;
+
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "×";
+  closeBtn.style.cssText = "background:none;border:none;color:#8a8fa8;font-size:18px;cursor:pointer;line-height:1;padding:0 4px;";
+  closeBtn.onclick = () => { toast.remove(); };
+  header.appendChild(closeBtn);
+
+  const body = document.createElement("div");
+  body.style.cssText = "color: #cad1e3; font-size: 12.5px;";
+  body.textContent = msg;
+
+  const actions = document.createElement("div");
+  actions.style.cssText = "display: flex; gap: 8px; margin-top: 4px;";
+
+  const settingsBtn = document.createElement("button");
+  settingsBtn.textContent = "Open Settings";
+  settingsBtn.style.cssText = `
+    background: #5b8af0;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  `;
+  settingsBtn.onclick = () => {
+    sendToBackground({ type: "OPEN_OPTIONS" });
+  };
+  actions.appendChild(settingsBtn);
+
+  toast.appendChild(header);
+  toast.appendChild(body);
+  toast.appendChild(actions);
+
+  document.body.appendChild(toast);
+  errorToast = toast;
+
+  errorToastTimeout = setTimeout(() => {
+    toast.remove();
+  }, 12000);
+}
+
 // ── Node handling ─────────────────────────────
 
 async function handleNewNodes(addedElements: Element[]): Promise<void> {
@@ -251,6 +350,9 @@ async function handleNewNodes(addedElements: Element[]): Promise<void> {
   const newNodes: ExtractedNode[] = [];
 
   for (const root of addedElements) {
+    if (root.closest?.("#llt-error-toast, #llt-floating-bar, #llt-tooltip, #llt-detail, [id^='llt-'], .llt-ui, .llt-state")) {
+      continue;
+    }
     if (
       !isTranslated(root) &&
       root.textContent?.trim() &&
@@ -386,6 +488,10 @@ chrome.runtime.onMessage.addListener(
           pendingIndices.delete(r.elementIndex);
         }
         applyTranslations(results);
+        const errorResult = results.find((r) => r.state === "error" && r.error);
+        if (errorResult?.error) {
+          showErrorToast(errorResult.error);
+        }
         sendResponse({ ok: true });
         break;
       }
@@ -409,6 +515,7 @@ chrome.runtime.onMessage.addListener(
 
       case "TRANSLATION_ERROR": {
         console.error("[LLM Translator] Error:", message.error);
+        showErrorToast(String((message as any).error || "Translation failed"));
         sendResponse({ ok: true });
         break;
       }

@@ -60,6 +60,28 @@ function showToast(message: string, type: "success" | "error" = "success"): void
 // ── API Section ───────────────────────────────
 
 async function initApiSection(config: GlobalConfig): Promise<void> {
+  const providerRadios = document.querySelectorAll<HTMLInputElement>('input[name="api-provider"]');
+  const customApiFields = document.getElementById("custom-api-fields")!;
+  const chromeAiPanel = document.getElementById("chrome-ai-panel")!;
+  const chromeTranslatorPanel = document.getElementById("chrome-translator-panel")!;
+
+  const chromeAiStatusCard = document.getElementById("chrome-ai-status-card")!;
+  const chromeAiStatusTitle = document.getElementById("chrome-ai-status-title")!;
+  const chromeAiStatusBody = document.getElementById("chrome-ai-status-body")!;
+  const chromeAiDownloadBox = document.getElementById("chrome-ai-download-box")!;
+  const chromeAiGuide = document.getElementById("chrome-ai-guide")!;
+  const btnDownloadChromeAi = document.getElementById("btn-download-chrome-ai")!;
+  const chromeAiDownloadProgress = document.getElementById("chrome-ai-download-progress")!;
+  const chromeAiProgressFill = document.getElementById("chrome-ai-progress-fill")!;
+  const chromeAiProgressText = document.getElementById("chrome-ai-progress-text")!;
+  const btnRecheckChromeAi = document.getElementById("btn-recheck-chrome-ai")!;
+
+  const chromeTranslatorStatusCard = document.getElementById("chrome-translator-status-card")!;
+  const chromeTranslatorStatusTitle = document.getElementById("chrome-translator-status-title")!;
+  const chromeTranslatorStatusBody = document.getElementById("chrome-translator-status-body")!;
+  const chromeTranslatorGuide = document.getElementById("chrome-translator-guide")!;
+  const btnRecheckChromeTranslator = document.getElementById("btn-recheck-chrome-translator")!;
+
   const apiBase = document.getElementById("api-base") as HTMLInputElement;
   const apiKey = document.getElementById("api-key") as HTMLInputElement;
   const apiModel = document.getElementById("api-model") as HTMLInputElement;
@@ -78,18 +100,231 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   const btnToggleKey = document.getElementById("btn-toggle-key")!;
 
   // Fill values
+  const currentProvider = config.api.provider || "custom";
+  providerRadios.forEach((r) => {
+    r.checked = r.value === currentProvider;
+  });
+
   apiBase.value = config.api.base;
   apiKey.value = config.api.key;
   apiModel.value = config.api.model;
   apiParallel.value = String(config.api.parallelCalls);
   apiChunkSize.value = String(config.api.chunkSize);
   apiTimeout.value = String(config.api.timeout);
-  if (config.api.temperature !== undefined) apiTemperature.value = String(config.api.temperature);
-  if (config.api.top_p !== undefined) apiTopP.value = String(config.api.top_p);
-  if (config.api.top_k !== undefined) apiTopK.value = String(config.api.top_k);
+  apiTemperature.value = config.api.temperature !== undefined ? String(config.api.temperature) : "0.3";
+  apiTopP.value = config.api.top_p !== undefined ? String(config.api.top_p) : "0.95";
+  apiTopK.value = config.api.top_k !== undefined ? String(config.api.top_k) : "64";
   if (config.api.min_p !== undefined) apiMinP.value = String(config.api.min_p);
   if (config.api.presence_penalty !== undefined) apiPresencePenalty.value = String(config.api.presence_penalty);
-  if (config.api.chat_template_kwargs !== undefined) apiChatTemplateKwargs.value = JSON.stringify(config.api.chat_template_kwargs);
+  apiChatTemplateKwargs.value = config.api.chat_template_kwargs !== undefined ? JSON.stringify(config.api.chat_template_kwargs) : '{"enable_thinking":false}';
+
+  // Status check helper
+  async function refreshBuiltinStatus(provider: string): Promise<void> {
+    const res = await sendToBackground({ type: "CHECK_CHROME_AI_STATUS" }) as {
+      ok: boolean;
+      data?: {
+        chromeAi: { enabled: boolean; availability: string; message: string };
+        chromeTranslator: { enabled: boolean; availability: string; message: string };
+      };
+    };
+
+    if (!res.ok || !res.data) return;
+
+    if (provider === "chrome-ai") {
+      const ai = res.data.chromeAi;
+      chromeAiStatusCard.className = "status-card";
+
+      const isReady = ai.enabled || ai.availability === "readily" || ai.availability === "available";
+      const isDownloadable = ai.availability === "downloadable" || ai.availability === "after-download";
+
+      if (isReady) {
+        chromeAiStatusCard.classList.add("status-card--ok");
+        chromeAiStatusTitle.textContent = "✓ Gemini Nano is Ready (On-Device)";
+        chromeAiStatusBody.textContent = "Gemini Nano is active and verified running locally on your device with 0 cloud cost.";
+        chromeAiDownloadBox.style.display = "none";
+        chromeAiGuide.style.display = "none";
+      } else if (isDownloadable) {
+        chromeAiStatusCard.classList.add("status-card--download");
+        chromeAiStatusTitle.textContent = "⬇️ Gemini Nano Ready to Download";
+        chromeAiStatusBody.textContent = "Chrome flags are enabled! Click below to download the model (~1.7 GB) for offline translation.";
+        chromeAiDownloadBox.style.display = "block";
+        chromeAiGuide.style.display = "none";
+      } else {
+        chromeAiStatusCard.classList.add("status-card--error");
+        chromeAiStatusTitle.textContent = "⚠️ Chrome Built-in AI Not Enabled";
+        chromeAiStatusBody.textContent = ai.message || "Follow the quick one-time setup steps below:";
+        chromeAiDownloadBox.style.display = "block";
+        chromeAiGuide.style.display = "block";
+      }
+    } else if (provider === "chrome-translator") {
+      const tr = res.data.chromeTranslator;
+      chromeTranslatorStatusCard.className = "status-card";
+
+      const isReady = tr.enabled || tr.availability === "readily" || tr.availability === "available" || tr.availability === "downloadable";
+
+      if (isReady) {
+        chromeTranslatorStatusCard.classList.add("status-card--ok");
+        chromeTranslatorStatusTitle.textContent = "✓ Chrome Fast Translator is Active";
+        chromeTranslatorStatusBody.textContent = "Zero setup required! Native on-device translator is ready. Language packs download automatically on demand.";
+        chromeTranslatorGuide.style.display = "none";
+      } else {
+        chromeTranslatorStatusCard.classList.add("status-card--error");
+        chromeTranslatorStatusTitle.textContent = "⚠️ Chrome Fast Translator Not Detected";
+        chromeTranslatorStatusBody.textContent = tr.message || "Translator API is not supported in this browser version.";
+        chromeTranslatorGuide.style.display = "block";
+      }
+    }
+  }
+
+  function updateProviderView(provider: string): void {
+    if (provider === "chrome-ai") {
+      customApiFields.style.display = "none";
+      chromeAiPanel.style.display = "block";
+      chromeTranslatorPanel.style.display = "none";
+      refreshBuiltinStatus("chrome-ai");
+    } else if (provider === "chrome-translator") {
+      customApiFields.style.display = "none";
+      chromeAiPanel.style.display = "none";
+      chromeTranslatorPanel.style.display = "block";
+      refreshBuiltinStatus("chrome-translator");
+    } else {
+      customApiFields.style.display = "block";
+      chromeAiPanel.style.display = "none";
+      chromeTranslatorPanel.style.display = "none";
+    }
+  }
+
+  providerRadios.forEach((r) => {
+    r.addEventListener("change", async () => {
+      updateProviderView(r.value);
+      // Auto-save provider selection immediately so it takes effect across all tabs
+      try {
+        const cfg = await loadGlobalConfig();
+        cfg.api.provider = r.value as import("../storage/config").TranslationProvider;
+        await saveGlobalConfig(cfg);
+        const name = r.value === "chrome-ai" ? "Gemini Nano" : r.value === "chrome-translator" ? "Fast Translator" : "Custom API";
+        showToast(`Switched provider to: ${name}`);
+      } catch {
+        // ignore
+      }
+    });
+  });
+
+  // Initial display
+  updateProviderView(currentProvider);
+
+  // Wire Copy Buttons in guides
+  document.querySelectorAll<HTMLButtonElement>(".btn-copy-code").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const textToCopy = btn.dataset.copy || "";
+      if (!textToCopy) return;
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+        const originalText = btn.textContent;
+        btn.textContent = "Copied!";
+        btn.classList.add("btn-copy-code--copied");
+        setTimeout(() => {
+          btn.textContent = originalText;
+          btn.classList.remove("btn-copy-code--copied");
+        }, 1800);
+      } catch {
+        showToast("Failed to copy to clipboard", "error");
+      }
+    });
+  });
+
+  // Wire Download button
+  btnDownloadChromeAi.addEventListener("click", async () => {
+    btnDownloadChromeAi.setAttribute("disabled", "true");
+    chromeAiDownloadProgress.style.display = "block";
+    chromeAiProgressFill.style.width = "5%";
+    chromeAiProgressText.textContent = "Requesting model download from Chrome (~1.7 GB)...";
+
+    let progressReceived = false;
+    const slowTimer = setTimeout(() => {
+      if (!progressReceived) {
+        chromeAiProgressText.textContent = "Download queued in Chrome. If it hangs, open chrome://components and click 'Check for update' on Optimization Guide On Device Model, or check chrome://on-device-internals.";
+      }
+    }, 10000);
+
+    const lm = (window as any).LanguageModel || (window as any).ai?.languageModel;
+
+    if (lm && typeof lm.create === "function") {
+      try {
+        const session = await lm.create({
+          systemPrompt: "You are a translator.",
+          initialPrompts: [{ role: "system", content: "You are a translator." }],
+          monitor(m: any) {
+            m.addEventListener("downloadprogress", (e: any) => {
+              progressReceived = true;
+              clearTimeout(slowTimer);
+              const loaded = e.loaded ?? 0;
+              const total = e.total || 1;
+              const percent = total > 1 ? Math.round((loaded / total) * 100) : Math.round(loaded * 100);
+              chromeAiProgressFill.style.width = `${Math.min(100, Math.max(5, percent))}%`;
+              chromeAiProgressText.textContent = `Downloading Gemini Nano... ${percent}%`;
+            });
+          },
+        });
+        clearTimeout(slowTimer);
+        if (session && typeof session.destroy === "function") {
+          session.destroy();
+        }
+        chromeAiProgressFill.style.width = "100%";
+        chromeAiProgressText.textContent = "✓ Download complete! Gemini Nano is ready.";
+        showToast("Gemini Nano downloaded successfully!");
+        setTimeout(() => {
+          refreshBuiltinStatus("chrome-ai");
+        }, 1500);
+        return;
+      } catch (err: any) {
+        clearTimeout(slowTimer);
+        const rawMsg = err instanceof Error ? err.message : String(err);
+        if (rawMsg.toLowerCase().includes("feature flag gating model execution was disabled")) {
+          chromeAiProgressFill.style.width = "0%";
+          chromeAiProgressText.textContent = "⚠️ Chrome blocked download: Open 'chrome://settings/ai' and turn on 'On-device AI'.";
+          showToast("On-device AI is disabled in Chrome settings", "error");
+          chromeAiGuide.style.display = "block";
+          btnDownloadChromeAi.removeAttribute("disabled");
+          return;
+        }
+        // If create failed with other error, try background
+      }
+    }
+
+    const res = await sendToBackground({ type: "DOWNLOAD_CHROME_AI" }) as {
+      ok: boolean;
+      error?: string;
+    };
+
+    if (res.ok) {
+      chromeAiProgressFill.style.width = "100%";
+      chromeAiProgressText.textContent = "✓ Model download initialized. Checking status...";
+      setTimeout(() => {
+        refreshBuiltinStatus("chrome-ai");
+      }, 3000);
+    } else {
+      chromeAiProgressFill.style.width = "0%";
+      const errorMsg = res.error ?? "Check chrome://flags";
+      if (errorMsg.toLowerCase().includes("feature flag gating model execution was disabled")) {
+        chromeAiProgressText.textContent = "⚠️ Chrome blocked download: Open 'chrome://settings/ai' and turn on 'On-device AI'.";
+      } else {
+        chromeAiProgressText.textContent = `Download note: ${errorMsg}`;
+      }
+      btnDownloadChromeAi.removeAttribute("disabled");
+    }
+  });
+
+  // Wire Recheck buttons
+  btnRecheckChromeAi.addEventListener("click", async () => {
+    await refreshBuiltinStatus("chrome-ai");
+    showToast("Status refreshed!");
+  });
+
+  btnRecheckChromeTranslator.addEventListener("click", async () => {
+    await refreshBuiltinStatus("chrome-translator");
+    showToast("Status refreshed!");
+  });
 
   // Show/hide key
   btnToggleKey.addEventListener("click", () => {
@@ -98,17 +333,21 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
 
   // Save
   btnSaveApi.addEventListener("click", async () => {
+    const selectedRadio = document.querySelector<HTMLInputElement>('input[name="api-provider"]:checked');
+    const provider = (selectedRadio?.value as import("../storage/config").TranslationProvider) || "custom";
+
     const cfg = await loadGlobalConfig();
     cfg.api = {
+      provider,
       base: apiBase.value.trim(),
       key: apiKey.value.trim(),
       model: apiModel.value.trim(),
       parallelCalls: parseInt(apiParallel.value) || 8,
       chunkSize: parseInt(apiChunkSize.value) || 8,
       timeout: parseInt(apiTimeout.value) || 60,
-      temperature: apiTemperature.value ? parseFloat(apiTemperature.value) : undefined,
-      top_p: apiTopP.value ? parseFloat(apiTopP.value) : undefined,
-      top_k: apiTopK.value ? parseInt(apiTopK.value) : undefined,
+      temperature: apiTemperature.value ? parseFloat(apiTemperature.value) : 0.3,
+      top_p: apiTopP.value ? parseFloat(apiTopP.value) : 0.95,
+      top_k: apiTopK.value ? parseInt(apiTopK.value) : 64,
       min_p: apiMinP.value ? parseFloat(apiMinP.value) : undefined,
       presence_penalty: apiPresencePenalty.value ? parseFloat(apiPresencePenalty.value) : undefined,
     };
@@ -123,7 +362,7 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
         return;
       }
     } else {
-      cfg.api.chat_template_kwargs = undefined;
+      cfg.api.chat_template_kwargs = { enable_thinking: false };
     }
     await saveGlobalConfig(cfg);
     showToast("API settings saved!");
@@ -135,16 +374,47 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
     testResult.textContent = "Testing…";
     testResult.style.opacity = "1";
 
-    const response = await sendToBackground({ type: "TEST_API" }) as {
-      ok: boolean;
-      data?: { ok: boolean; error?: string };
-    };
+    const selectedRadio = document.querySelector<HTMLInputElement>('input[name="api-provider"]:checked');
+    const provider = (selectedRadio?.value as import("../storage/config").TranslationProvider) || "custom";
 
-    if (response.ok && response.data?.ok) {
-      testResult.textContent = "✓ Connection successful";
-      testResult.className = "test-result test-result--ok";
-    } else {
-      testResult.textContent = `✗ ${response.data?.error ?? "Connection failed"}`;
+    try {
+      const responsePromise = sendToBackground({
+        type: "TEST_API",
+        config: {
+          provider,
+          base: apiBase.value.trim(),
+          key: apiKey.value.trim(),
+          model: apiModel.value.trim(),
+        },
+      }) as Promise<{
+        ok: boolean;
+        data?: { ok: boolean; error?: string; model?: string };
+        error?: string;
+      }>;
+
+      const timeoutPromise = new Promise<{ ok: false; error: string }>((resolve) =>
+        setTimeout(
+          () =>
+            resolve({
+              ok: false,
+              error: "Test timed out after 10s. The model may be downloading in the background.",
+            }),
+          10000
+        )
+      );
+
+      const response = await Promise.race([responsePromise, timeoutPromise]);
+
+      if (response.ok && response.data?.ok) {
+        testResult.textContent = `✓ Active: ${response.data.model ?? "Success"}`;
+        testResult.className = "test-result test-result--ok";
+      } else {
+        const errMsg = response.ok ? (response.data?.error ?? "Connection failed") : response.error;
+        testResult.textContent = `✗ ${errMsg}`;
+        testResult.className = "test-result test-result--error";
+      }
+    } catch (err) {
+      testResult.textContent = `✗ Error: ${err instanceof Error ? err.message : String(err)}`;
       testResult.className = "test-result test-result--error";
     }
   });

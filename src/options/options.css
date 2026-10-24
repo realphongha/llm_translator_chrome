@@ -677,3 +677,286 @@ html, body {
   border-color: rgba(240, 112, 112, 0.3);
   color: var(--error-color);
 }
+
+/* ── Provider Selector ───────────────────────── */
+
+.provider-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+  margin-bottom: 16px;
+}
+
+.provider-card {
+  position: relative;
+  display: flex;
+  background: var(--bg-surface);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.provider-card input[type="radio"] {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  accent-color: var(--accent);
+}
+
+.provider-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-bright);
+}
+
+.provider-card:has(input[type="radio"]:checked) {
+  border-color: var(--accent);
+  background: rgba(91, 138, 240, 0.08);
+}
+
+.provider-card__content {
+  padding-right: 22px;
+}
+
+.provider-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.provider-card__title svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.provider-card__desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.badge-tag {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(78, 203, 133, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(78, 203, 133, 0.25);
+  margin-left: auto;
+}
+
+/* ── Builtin Panels & Status Cards ───────────── */
+
+.builtin-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.status-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.status-card__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.status-indicator {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-card__title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.status-card__body {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.status-card--ok {
+  border-color: rgba(78, 203, 133, 0.35);
+  background: rgba(78, 203, 133, 0.05);
+}
+
+.status-card--ok .status-indicator {
+  background: var(--success);
+  box-shadow: 0 0 8px rgba(78, 203, 133, 0.6);
+}
+
+.status-card--ok .status-card__title {
+  color: var(--success);
+}
+
+.status-card--download {
+  border-color: rgba(91, 138, 240, 0.35);
+  background: rgba(91, 138, 240, 0.05);
+}
+
+.status-card--download .status-indicator {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(91, 138, 240, 0.6);
+}
+
+.status-card--download .status-card__title {
+  color: var(--accent);
+}
+
+.status-card--error {
+  border-color: rgba(240, 168, 78, 0.35);
+  background: rgba(240, 168, 78, 0.05);
+}
+
+.status-card--error .status-indicator {
+  background: var(--warning);
+  box-shadow: 0 0 8px rgba(240, 168, 78, 0.6);
+}
+
+.status-card--error .status-card__title {
+  color: var(--warning);
+}
+
+/* ── Download Box & Progress ─────────────────── */
+
+.download-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.download-box__desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.progress-bar-wrap {
+  margin-top: 6px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-bar__text {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* ── Guide Card & Code Pills ─────────────────── */
+
+.guide-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.guide-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.guide-steps {
+  list-style-position: inside;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.guide-steps li {
+  padding-left: 4px;
+  line-height: 1.5;
+}
+
+.guide-step-title {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.code-pill {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-base);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px 4px 10px;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.code-pill code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: #a5d6ff;
+  user-select: all;
+}
+
+.btn-copy-code {
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-copy-code:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.btn-copy-code--copied {
+  background: var(--success);
+  color: #0b0d12;
+}
+
+.guide-footer {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-start;
+}

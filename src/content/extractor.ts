@@ -302,6 +302,10 @@ const EXTENSION_UI_SELECTORS = [
   "#llt-tooltip",
   "#llt-bar-tooltip",
   "#llt-detail",
+  "#llt-error-toast",
+  "[id^='llt-']",
+  ".llt-ui",
+  ".llt-state",
 ];
 
 function isExtensionUi(el: Element): boolean {

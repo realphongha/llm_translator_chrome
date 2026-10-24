@@ -59,24 +59,176 @@
 
         <div class="card">
           <div class="field">
-            <label class="field__label" for="api-base">API Base URL</label>
-            <input type="url" id="api-base" class="input" placeholder="http://localhost:8080/v1" />
-            <p class="field__hint">Examples: <code>http://localhost:11434/v1</code> (Ollama), <code>https://openrouter.ai/api/v1</code></p>
-          </div>
+            <label class="field__label">Translation Engine / Provider</label>
+            <div class="provider-selector" id="provider-selector">
+              <label class="provider-card">
+                <input type="radio" name="api-provider" value="custom" checked />
+                <div class="provider-card__content">
+                  <div class="provider-card__title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                    Custom / Cloud API
+                  </div>
+                  <div class="provider-card__desc">OpenAI, Google Gemini Flash, Groq, or local Ollama</div>
+                </div>
+              </label>
 
-          <div class="field">
-            <label class="field__label" for="api-key">API Key</label>
-            <div class="input-group">
-              <input type="password" id="api-key" class="input" placeholder="sk-... (leave empty for local)" />
-              <button id="btn-toggle-key" class="input-addon" title="Show/hide key">
-                <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
+              <label class="provider-card">
+                <input type="radio" name="api-provider" value="chrome-ai" />
+                <div class="provider-card__content">
+                  <div class="provider-card__title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    Chrome Built-in AI
+                    <span class="badge-tag">Builtin</span>
+                  </div>
+                  <div class="provider-card__desc">Gemini Nano running inside Chrome (supports novel prompts)</div>
+                </div>
+              </label>
+
+              <label class="provider-card">
+                <input type="radio" name="api-provider" value="chrome-translator" />
+                <div class="provider-card__content">
+                  <div class="provider-card__title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></svg>
+                    Chrome Fast Translator
+                    <span class="badge-tag">Builtin &amp; Fast</span>
+                  </div>
+                  <div class="provider-card__desc">Chrome's on-device neural translator (fast, zero cloud cost)</div>
+                </div>
+              </label>
             </div>
           </div>
 
-          <div class="field">
-            <label class="field__label" for="api-model">Model</label>
-            <input type="text" id="api-model" class="input" placeholder="llama3, gpt-4o-mini, deepseek-v2..." />
+          <!-- Chrome Built-in AI Setup & Status Guide -->
+          <div id="chrome-ai-panel" class="builtin-panel" style="display:none;">
+            <div id="chrome-ai-status-card" class="status-card status-card--checking">
+              <div class="status-card__header">
+                <div class="status-indicator"></div>
+                <div class="status-card__title" id="chrome-ai-status-title">Checking Chrome Built-in AI...</div>
+              </div>
+              <div class="status-card__body" id="chrome-ai-status-body">Detecting device compatibility and Chrome flags...</div>
+            </div>
+
+            <!-- Performance Tip Card -->
+            <div class="guide-card" style="margin-top:10px; border-left: 3px solid #3b82f6;">
+              <h4 class="guide-title" style="display:flex;align-items:center;gap:6px;">
+                🚀 Boost Gemini Nano Speed (1.5x–2x Faster)
+              </h4>
+              <p style="font-size:12.5px;color:#c0c4d6;margin:4px 0 8px;line-height:1.45;">
+                Enable Chrome's hardware speculative decoding to accelerate on-device token generation:
+              </p>
+              <div class="code-pill">
+                <code>chrome://flags/#on-device-model-speculative-decoding</code>
+                <button type="button" class="btn-copy-code" data-copy="chrome://flags/#on-device-model-speculative-decoding">Copy</button>
+              </div>
+              <p class="field__hint" style="margin-top:4px;font-size:11.5px;color:#9aa1b5;">
+                Set to <strong>Enabled</strong>, then click <strong>Relaunch</strong> at the bottom of Chrome.
+              </p>
+            </div>
+
+            <!-- Download Model Action -->
+            <div id="chrome-ai-download-box" class="download-box" style="display:none;">
+              <p class="download-box__desc">Chrome needs to download the Gemini Nano model weights (~1.7 GB) to run offline.</p>
+              <button type="button" id="btn-download-chrome-ai" class="btn btn--primary">
+                Download Gemini Nano
+              </button>
+              <div id="chrome-ai-download-progress" class="progress-bar-wrap" style="display:none;">
+                <div class="progress-bar"><div class="progress-bar__fill" id="chrome-ai-progress-fill" style="width:0%"></div></div>
+                <div class="progress-bar__text" id="chrome-ai-progress-text">Downloading...</div>
+              </div>
+            </div>
+
+            <!-- Flag instructions Guide -->
+            <div id="chrome-ai-guide" class="guide-card" style="display:none;">
+              <h4 class="guide-title">How to enable Chrome Built-in AI (One-time setup):</h4>
+              <ol class="guide-steps">
+                <li>
+                  <div class="guide-step-title"><strong>Step 1:</strong> Turn on "On-device AI" in Chrome Settings:</div>
+                  <div class="code-pill">
+                    <code>chrome://settings/ai</code>
+                    <button type="button" class="btn-copy-code" data-copy="chrome://settings/ai">Copy</button>
+                  </div>
+                  <p class="field__hint" style="margin-top:4px;font-size:11.5px;color:#9aa1b5;">Ensure the master toggle for <strong>On-device AI</strong> (or AI Innovations) is switched <strong>On</strong>.</p>
+                </li>
+                <li>
+                  <div class="guide-step-title"><strong>Step 2:</strong> In Chrome Flags, enable the Prompt API:</div>
+                  <div class="code-pill">
+                    <code>chrome://flags/#prompt-api</code>
+                    <button type="button" class="btn-copy-code" data-copy="chrome://flags/#prompt-api">Copy</button>
+                  </div>
+                  <p class="field__hint" style="margin-top:4px;font-size:11.5px;color:#9aa1b5;">Set to <strong>Enabled</strong>, then click <strong>Relaunch</strong> at the bottom of Chrome.</p>
+                </li>
+                <li>
+                  <div class="guide-step-title"><strong>Step 3:</strong> Download Gemini Nano:</div>
+                  <p class="field__hint" style="margin-top:4px;font-size:12px;color:#c0c4d6;">Click the <strong>Download Gemini Nano</strong> button above, or check <code style="color:#60a5fa;">chrome://components</code> (Optimization Guide On Device Model).</p>
+                </li>
+                <li>
+                  <div class="guide-step-title"><strong>Step 4 (Optional):</strong> Boost inference speed:</div>
+                  <div class="code-pill">
+                    <code>chrome://flags/#on-device-model-speculative-decoding</code>
+                    <button type="button" class="btn-copy-code" data-copy="chrome://flags/#on-device-model-speculative-decoding">Copy</button>
+                  </div>
+                  <p class="field__hint" style="margin-top:4px;font-size:11.5px;color:#9aa1b5;">Enabling speculative decoding gives a 1.5x–2x speedup on local models.</p>
+                </li>
+              </ol>
+              <div class="guide-footer">
+                <button type="button" id="btn-recheck-chrome-ai" class="btn btn--secondary">
+                  Check Again
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Chrome Translator Guide -->
+          <div id="chrome-translator-panel" class="builtin-panel" style="display:none;">
+            <div id="chrome-translator-status-card" class="status-card status-card--checking">
+              <div class="status-card__header">
+                <div class="status-indicator"></div>
+                <div class="status-card__title" id="chrome-translator-status-title">Checking Chrome Translator API...</div>
+              </div>
+              <div class="status-card__body" id="chrome-translator-status-body">Detecting Translator API...</div>
+            </div>
+
+            <div id="chrome-translator-guide" class="guide-card" style="display:none;">
+              <h4 class="guide-title">Chrome Fast Translator Info:</h4>
+              <ol class="guide-steps">
+                <li>
+                  <div class="guide-step-title"><strong>Zero Setup Required:</strong> Native Browser Feature</div>
+                  <p class="field__hint" style="margin-top:4px;font-size:12px;color:#c0c4d6;">In modern Chrome, the <code>Translator</code> API is built-in out of the box—no experimental flags or "On-device AI" settings required.</p>
+                </li>
+                <li>
+                  <div class="guide-step-title"><strong>Language Packs:</strong> Compact &amp; Automatic</div>
+                  <p class="field__hint" style="margin-top:4px;font-size:12px;color:#c0c4d6;">Lightweight models (~20–40 MB) download automatically on demand. You can view installed language pairs at <code style="color:#60a5fa;">chrome://on-device-translation-internals</code>.</p>
+                </li>
+              </ol>
+              <div class="guide-footer">
+                <button type="button" id="btn-recheck-chrome-translator" class="btn btn--secondary">
+                  Check Again
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div id="custom-api-fields">
+            <div class="field">
+              <label class="field__label" for="api-base">API Base URL</label>
+              <input type="url" id="api-base" class="input" placeholder="http://localhost:8080/v1" />
+              <p class="field__hint">Examples: <code>http://localhost:11434/v1</code> (Ollama), <code>https://openrouter.ai/api/v1</code></p>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="api-key">API Key</label>
+              <div class="input-group">
+                <input type="password" id="api-key" class="input" placeholder="sk-... (leave empty for local)" />
+                <button id="btn-toggle-key" class="input-addon" title="Show/hide key">
+                  <svg id="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="api-model">Model</label>
+              <input type="text" id="api-model" class="input" placeholder="llama3, gpt-4o-mini, deepseek-v2..." />
+            </div>
           </div>
 
           <div class="field-row">
@@ -102,18 +254,18 @@
           <div class="field-row">
             <div class="field field--half">
               <label class="field__label" for="api-temperature">Temperature</label>
-              <input type="number" id="api-temperature" class="input" min="0" max="2" step="0.05" value="0.1" />
+              <input type="number" id="api-temperature" class="input" min="0" max="2" step="0.05" value="0.3" />
             </div>
             <div class="field field--half">
               <label class="field__label" for="api-top-p">Top-P</label>
-              <input type="number" id="api-top-p" class="input" min="0" max="1" step="0.05" placeholder="—" />
+              <input type="number" id="api-top-p" class="input" min="0" max="1" step="0.05" value="0.95" placeholder="0.95" />
             </div>
           </div>
 
           <div class="field-row">
             <div class="field field--half">
               <label class="field__label" for="api-top-k">Top-K</label>
-              <input type="number" id="api-top-k" class="input" min="0" max="200" step="1" placeholder="—" />
+              <input type="number" id="api-top-k" class="input" min="0" max="200" step="1" value="64" placeholder="64" />
             </div>
             <div class="field field--half">
               <label class="field__label" for="api-min-p">Min-P</label>
@@ -129,7 +281,7 @@
 
           <div class="field">
             <label class="field__label" for="api-chat-template-kwargs">Chat Template Kwargs</label>
-            <input type="text" id="api-chat-template-kwargs" class="input input--mono" placeholder='{"enable_thinking":false}' />
+            <input type="text" id="api-chat-template-kwargs" class="input input--mono" value='{"enable_thinking":false}' placeholder='{"enable_thinking":false}' />
             <p class="field__hint">JSON object passed to the chat template. Use <code>{"enable_thinking":false}</code> to disable reasoning tokens.</p>
           </div>
         </div>

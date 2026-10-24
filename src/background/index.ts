@@ -22,7 +22,7 @@ import {
   emitResults,
 } from "./queue";
 import { clearCache, getCacheStats, initCache, setCached, getCached } from "./cache";
-import { testApiConnection } from "./api";
+import { testApiConnection, checkChromeAiStatus, checkChromeTranslatorStatus, getLanguageModelApi } from "./api";
 
 // ── Message types ─────────────────────────────
 
@@ -33,14 +33,17 @@ export type BgMessage =
   | { type: "GET_STATUS" }
   | { type: "GET_SITE_CONFIG"; hostname: string }
   | { type: "SAVE_SITE_CONFIG"; config: import("../storage/config").SiteConfig }
-  | { type: "TEST_API" }
+  | { type: "TEST_API"; config?: Partial<import("../storage/config").ApiConfig> }
   | { type: "CLEAR_CACHE" }
   | { type: "GET_CACHE_STATS" }
   | { type: "CLEAR_QUEUE" }
-  | { type: "SET_MANUAL_TRANSLATION"; original: string; translation: string };
+  | { type: "SET_MANUAL_TRANSLATION"; original: string; translation: string }
+  | { type: "CHECK_CHROME_AI_STATUS" }
+  | { type: "DOWNLOAD_CHROME_AI" }
+  | { type: "OPEN_OPTIONS" };
 
 export type BgResponse =
-  | { ok: true; data?: unknown }
+  | { ok: true; data?: unknown; apiProvider?: string; apiModel?: string }
   | { ok: false; error: string };
 
 // ── Result forwarding to content scripts ─────
@@ -118,7 +121,8 @@ async function resolveSession(
   const globalConfig = await loadGlobalConfig();
   initCache(globalConfig.cache.maxMb);
 
-  if (!globalConfig.api.base || !globalConfig.api.model) {
+  const isBuiltin = globalConfig.api.provider === "chrome-ai" || globalConfig.api.provider === "chrome-translator";
+  if (!isBuiltin && (!globalConfig.api.base || !globalConfig.api.model)) {
     return null;
   }
 
@@ -143,7 +147,10 @@ async function resolveSession(
     globalConfig.userPrompts
   );
 
-  return { systemPrompt, model: globalConfig.api.model };
+  const modelName = isBuiltin
+    ? (globalConfig.api.provider === "chrome-ai" ? "chrome-gemini-nano" : "chrome-translator")
+    : globalConfig.api.model;
+  return { systemPrompt, model: modelName };
 }
 
 async function startTranslation(tabId: number, retranslate = false): Promise<void> {
@@ -154,7 +161,8 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
     const globalConfig = await loadGlobalConfig();
     initCache(globalConfig.cache.maxMb);
 
-    if (!globalConfig.api.base || !globalConfig.api.model) {
+    const isBuiltin = globalConfig.api.provider === "chrome-ai" || globalConfig.api.provider === "chrome-translator";
+  if (!isBuiltin && (!globalConfig.api.base || !globalConfig.api.model)) {
       const err = "API not configured. Please open Settings.";
       await chrome.tabs.sendMessage(tabId, { type: "TRANSLATION_ERROR", error: err }).catch(() => {});
       await chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", tabId, error: err }).catch(() => {});
@@ -201,7 +209,7 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
 
     resumeQueue(tabId);
 
-    await runQueue(tabId, systemPrompt, globalConfig.api, globalConfig.translation);
+    await runQueue(tabId, systemPrompt, globalConfig.api, globalConfig.translation, siteConfig.sourceLanguage, siteConfig.targetLanguage);
   } finally {
     activeSessions.delete(tabId);
     // If a retranslate arrived while this session was running, run it now so a
@@ -328,7 +336,13 @@ chrome.runtime.onMessage.addListener(
               config = createDefaultSiteConfig(message.hostname);
               await saveSiteConfig(config);
             }
-            sendResponse({ ok: true, data: config });
+            const globalCfg = await loadGlobalConfig();
+            sendResponse({
+              ok: true,
+              data: config,
+              apiProvider: globalCfg.api.provider || "custom",
+              apiModel: globalCfg.api.model || "",
+            });
             break;
           }
 
@@ -339,8 +353,11 @@ chrome.runtime.onMessage.addListener(
           }
 
           case "TEST_API": {
-            const config = await loadGlobalConfig();
-            const result = await testApiConnection(config.api);
+            const savedConfig = await loadGlobalConfig();
+            const configToTest = message.config
+              ? { ...savedConfig.api, ...message.config }
+              : savedConfig.api;
+            const result = await testApiConnection(configToTest);
             sendResponse({ ok: true, data: result });
             break;
           }
@@ -370,6 +387,54 @@ chrome.runtime.onMessage.addListener(
               message.original,
               message.translation
             );
+            sendResponse({ ok: true });
+            break;
+          }
+
+          case "CHECK_CHROME_AI_STATUS": {
+            const [aiStatus, translatorStatus] = await Promise.all([
+              checkChromeAiStatus(),
+              checkChromeTranslatorStatus(),
+            ]);
+            sendResponse({
+              ok: true,
+              data: {
+                chromeAi: aiStatus,
+                chromeTranslator: translatorStatus,
+              },
+            });
+            break;
+          }
+
+          case "DOWNLOAD_CHROME_AI": {
+            const lm = getLanguageModelApi();
+            if (!lm) {
+              sendResponse({ ok: false, error: "Chrome Built-in AI is not enabled in flags." });
+              break;
+            }
+            try {
+              const session = await lm.create({
+                systemPrompt: "You are a translator.",
+                initialPrompts: [{ role: "system", content: "You are a translator." }],
+              });
+              if (typeof session.destroy === "function") session.destroy();
+              sendResponse({ ok: true });
+            } catch (err) {
+              const rawMsg = err instanceof Error ? err.message : String(err);
+              let friendly = rawMsg;
+              if (rawMsg.toLowerCase().includes("feature flag gating model execution was disabled")) {
+                friendly = "On-device AI is disabled. Open 'chrome://settings/ai' and turn on 'On-device AI', or set '#prompt-api' to Enabled in chrome://flags.";
+              }
+              sendResponse({
+                ok: false,
+                error: friendly,
+              });
+            }
+            break;
+          }
+
+          case "OPEN_OPTIONS": {
+            await chrome.runtime.openOptionsPage();
             sendResponse({ ok: true });
             break;
           }
