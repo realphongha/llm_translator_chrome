@@ -169,6 +169,33 @@ async function startTranslation(tabId: number, retranslate = false): Promise<voi
       return;
     }
 
+    if (globalConfig.api.provider === "chrome-ai") {
+      const status = await checkChromeAiStatus();
+      if (!status.enabled) {
+        clearQueue(tabId);
+        await chrome.tabs.sendMessage(tabId, { type: "TRANSLATION_ERROR", error: status.message }).catch(() => {});
+        await chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", tabId, error: status.message }).catch(() => {});
+        return;
+      }
+      if (status.availability === "downloadable") {
+        clearQueue(tabId);
+        const err = "Gemini Nano model (~1.7 GB) is not downloaded yet. Please open Settings to download it.";
+        await chrome.tabs.sendMessage(tabId, { type: "TRANSLATION_ERROR", error: err }).catch(() => {});
+        await chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", tabId, error: err }).catch(() => {});
+        return;
+      }
+    }
+
+    if (globalConfig.api.provider === "chrome-translator") {
+      const status = await checkChromeTranslatorStatus();
+      if (!status.enabled) {
+        clearQueue(tabId);
+        await chrome.tabs.sendMessage(tabId, { type: "TRANSLATION_ERROR", error: status.message }).catch(() => {});
+        await chrome.runtime.sendMessage({ type: "TRANSLATION_ERROR", tabId, error: status.message }).catch(() => {});
+        return;
+      }
+    }
+
     // Get hostname from tab
     const tab = await chrome.tabs.get(tabId);
     const hostname = tab.url ? new URL(tab.url).hostname : "";

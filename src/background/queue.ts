@@ -189,7 +189,7 @@ async function processBatch(
         break;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        if (err instanceof ApiError && err.type === "http_error" && err.status === 401) {
+        if (err instanceof ApiError && ((err.type === "http_error" && err.status === 401) || err.type === "api_unavailable")) {
           break; // Don't retry auth errors
         }
         if (attempt < job.retryCount) {
