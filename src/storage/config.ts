@@ -75,9 +75,20 @@ export interface SiteConfig {
 
 // ── Defaults ─────────────────────────────────
 
+export function detectDefaultProvider(): TranslationProvider {
+  if (typeof navigator !== "undefined") {
+    const ua = navigator.userAgent || "";
+    const isChrome = /Chrome\//.test(ua) && !/Firefox\//.test(ua);
+    if (isChrome) {
+      return "chrome-translator";
+    }
+  }
+  return "custom";
+}
+
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   api: {
-    provider: "custom",
+    provider: detectDefaultProvider(),
     base: "",
     key: "",
     model: "",
@@ -122,8 +133,13 @@ export async function loadGlobalConfig(): Promise<GlobalConfig> {
   const stored = result[GLOBAL_KEY] as Partial<GlobalConfig> | undefined;
   if (!stored) return { ...DEFAULT_GLOBAL_CONFIG };
 
+  const defaultProvider = detectDefaultProvider();
   return {
-    api: { ...DEFAULT_GLOBAL_CONFIG.api, ...stored.api },
+    api: {
+      ...DEFAULT_GLOBAL_CONFIG.api,
+      ...stored.api,
+      provider: stored.api?.provider || defaultProvider,
+    },
     translation: { ...DEFAULT_GLOBAL_CONFIG.translation, ...stored.translation },
     cache: { ...DEFAULT_GLOBAL_CONFIG.cache, ...stored.cache },
     userPrompts: stored.userPrompts ?? {},

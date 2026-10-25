@@ -82,6 +82,13 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   const chromeTranslatorGuide = document.getElementById("chrome-translator-guide")!;
   const btnRecheckChromeTranslator = document.getElementById("btn-recheck-chrome-translator")!;
 
+  const cardChromeAi = document.getElementById("provider-card-chrome-ai");
+  const cardChromeTranslator = document.getElementById("provider-card-chrome-translator");
+  const firstRunBanner = document.getElementById("first-run-banner");
+  const btnBannerCustom = document.getElementById("btn-banner-custom");
+  const btnBannerDismiss = document.getElementById("btn-banner-dismiss");
+  const btnBannerClose = document.getElementById("btn-banner-close");
+
   const apiBase = document.getElementById("api-base") as HTMLInputElement;
   const apiKey = document.getElementById("api-key") as HTMLInputElement;
   const apiModel = document.getElementById("api-model") as HTMLInputElement;
@@ -99,11 +106,72 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   const testResult = document.getElementById("test-result")!;
   const btnToggleKey = document.getElementById("btn-toggle-key")!;
 
+  // Capability check for Chrome / Builtin AI
+  const ua = navigator.userAgent || "";
+  const isChromeOrSupported =
+    (/Chrome\//.test(ua) && !/Firefox\//.test(ua)) ||
+    typeof (window as any).LanguageModel !== "undefined" ||
+    typeof (window as any).Translator !== "undefined" ||
+    typeof (window as any).ai !== "undefined" ||
+    typeof (window as any).translation !== "undefined";
+
+  if (!isChromeOrSupported) {
+    if (cardChromeAi) cardChromeAi.style.display = "none";
+    if (cardChromeTranslator) cardChromeTranslator.style.display = "none";
+  }
+
   // Fill values
-  const currentProvider = config.api.provider || "custom";
+  let currentProvider = config.api.provider || (isChromeOrSupported ? "chrome-translator" : "custom");
+  if (!isChromeOrSupported && currentProvider !== "custom") {
+    currentProvider = "custom";
+  }
+
   providerRadios.forEach((r) => {
     r.checked = r.value === currentProvider;
   });
+
+  // Strategy 2: First-Run Welcome Hero Banner (First time only right after installation)
+  if (firstRunBanner && isChromeOrSupported) {
+    try {
+      const storage = await chrome.storage.local.get("hasSeenWelcomeBanner");
+      if (!storage.hasSeenWelcomeBanner) {
+        firstRunBanner.style.display = "flex";
+
+        const dismissBanner = async () => {
+          firstRunBanner.style.opacity = "0";
+          firstRunBanner.style.transition = "opacity 0.25s ease";
+          setTimeout(() => {
+            firstRunBanner.style.display = "none";
+          }, 250);
+          await chrome.storage.local.set({ hasSeenWelcomeBanner: true });
+        };
+
+        btnBannerDismiss?.addEventListener("click", dismissBanner);
+        btnBannerClose?.addEventListener("click", dismissBanner);
+
+        btnBannerCustom?.addEventListener("click", async () => {
+          await dismissBanner();
+          const customRadio = document.querySelector<HTMLInputElement>('input[name="api-provider"][value="custom"]');
+          if (customRadio) {
+            customRadio.checked = true;
+            updateProviderView("custom");
+            try {
+              const cfg = await loadGlobalConfig();
+              cfg.api.provider = "custom";
+              await saveGlobalConfig(cfg);
+            } catch {}
+          }
+          customApiFields.scrollIntoView({ behavior: "smooth", block: "start" });
+          setTimeout(() => {
+            apiBase.focus();
+          }, 350);
+          showToast("Switched to Custom API. Configure your endpoint details below.");
+        });
+      }
+    } catch {
+      // storage unavailable
+    }
+  }
 
   apiBase.value = config.api.base;
   apiKey.value = config.api.key;
@@ -202,6 +270,10 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
         const cfg = await loadGlobalConfig();
         cfg.api.provider = r.value as import("../storage/config").TranslationProvider;
         await saveGlobalConfig(cfg);
+        await chrome.storage.local.set({ hasSeenWelcomeBanner: true });
+        if (firstRunBanner && firstRunBanner.style.display !== "none") {
+          firstRunBanner.style.display = "none";
+        }
         const name = r.value === "chrome-ai" ? "Gemini Nano" : r.value === "chrome-translator" ? "Fast Translator" : "Custom API";
         showToast(`Switched provider to: ${name}`);
       } catch {
@@ -365,6 +437,10 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
       cfg.api.chat_template_kwargs = { enable_thinking: false };
     }
     await saveGlobalConfig(cfg);
+    await chrome.storage.local.set({ hasSeenWelcomeBanner: true });
+    if (firstRunBanner && firstRunBanner.style.display !== "none") {
+      firstRunBanner.style.display = "none";
+    }
     showToast("API settings saved!");
   });
 

@@ -57,22 +57,52 @@
           <p class="section__desc">Connect to any OpenAI-compatible endpoint — local or cloud.</p>
         </div>
 
+        <!-- First-Run Welcome Hero Banner (Strategy 2: Shown once after installation) -->
+        <div id="first-run-banner" class="first-run-banner" style="display: none;">
+          <div class="first-run-banner__icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+            </svg>
+          </div>
+          <div class="first-run-banner__body">
+            <div class="first-run-banner__header">
+              <span class="first-run-banner__badge">Welcome to LLM Page Translator! 🎉</span>
+              <button type="button" id="btn-banner-close" class="first-run-banner__close" title="Dismiss">&times;</button>
+            </div>
+            <h3 class="first-run-banner__title">Instant On-Device Translation is Ready</h3>
+            <p class="first-run-banner__desc">
+              Chrome's built-in <strong>Fast Translator</strong> is active as your instant default engine (0 setup, 0 cost).
+              Prefer state-of-the-art LLMs? You can connect <strong>Ollama (local)</strong>, <strong>OpenAI</strong>, <strong>DeepSeek</strong>, or enable <strong>Gemini Nano</strong> anytime!
+            </p>
+            <div class="first-run-banner__actions">
+              <button type="button" id="btn-banner-custom" class="btn btn--primary btn--sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                Configure Custom LLM (Ollama/OpenAI)
+              </button>
+              <button type="button" id="btn-banner-dismiss" class="btn btn--secondary btn--sm">
+                Keep Fast Translator (Default)
+              </button>
+            </div>
+          </div>
+        </div>
+
         <div class="card">
           <div class="field">
             <label class="field__label">Translation Engine / Provider</label>
             <div class="provider-selector" id="provider-selector">
-              <label class="provider-card">
+              <label class="provider-card" id="provider-card-custom">
                 <input type="radio" name="api-provider" value="custom" checked />
                 <div class="provider-card__content">
                   <div class="provider-card__title">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
                     Custom / Cloud API
+                    <span class="badge-tag badge-tag--accent">Ollama · OpenAI · DeepSeek</span>
                   </div>
                   <div class="provider-card__desc">OpenAI, Google Gemini Flash, Groq, or local Ollama</div>
                 </div>
               </label>
 
-              <label class="provider-card">
+              <label class="provider-card" id="provider-card-chrome-ai">
                 <input type="radio" name="api-provider" value="chrome-ai" />
                 <div class="provider-card__content">
                   <div class="provider-card__title">
@@ -84,7 +114,7 @@
                 </div>
               </label>
 
-              <label class="provider-card">
+              <label class="provider-card" id="provider-card-chrome-translator">
                 <input type="radio" name="api-provider" value="chrome-translator" />
                 <div class="provider-card__content">
                   <div class="provider-card__title">
