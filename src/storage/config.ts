@@ -19,6 +19,15 @@ export interface ApiConfig {
   min_p?: number;
   presence_penalty?: number;
   chat_template_kwargs?: Record<string, unknown>;
+  reasoning_effort?: string;
+  maxChars?: number;
+  retryCount?: number;
+}
+
+export interface ApiProfile {
+  id: string;
+  name: string;
+  config: ApiConfig;
 }
 
 export interface TranslationConfig {
@@ -36,6 +45,9 @@ export interface GlobalConfig {
   cache: CacheConfig;
   /** Custom user-created prompts keyed by id */
   userPrompts: Record<string, UserPrompt>;
+  /** Saved API profiles keyed by id */
+  apiProfiles?: Record<string, ApiProfile>;
+  activeProfileId?: string;
 }
 
 export interface UserPrompt {
@@ -99,6 +111,9 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
     top_p: 0.95,
     top_k: 64,
     chat_template_kwargs: { enable_thinking: false },
+    reasoning_effort: "",
+    maxChars: 4000,
+    retryCount: 3,
   },
   translation: {
     maxChars: 4000,
@@ -108,6 +123,29 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
     maxMb: 7,
   },
   userPrompts: {},
+  apiProfiles: {
+    default: {
+      id: "default",
+      name: "Default",
+      config: {
+        provider: "custom",
+        base: "",
+        key: "",
+        model: "",
+        parallelCalls: 8,
+        chunkSize: 8,
+        timeout: 60,
+        temperature: 0.3,
+        top_p: 0.95,
+        top_k: 64,
+        chat_template_kwargs: { enable_thinking: false },
+        reasoning_effort: "",
+        maxChars: 4000,
+        retryCount: 3,
+      },
+    },
+  },
+  activeProfileId: "default",
 };
 
 export const DEFAULT_SITE_CONFIG: Omit<SiteConfig, "hostname"> = {
@@ -134,15 +172,53 @@ export async function loadGlobalConfig(): Promise<GlobalConfig> {
   if (!stored) return { ...DEFAULT_GLOBAL_CONFIG };
 
   const defaultProvider = detectDefaultProvider();
+  const fallbackMaxChars = stored.translation?.maxChars ?? DEFAULT_GLOBAL_CONFIG.translation.maxChars;
+  const fallbackRetryCount = stored.translation?.retryCount ?? DEFAULT_GLOBAL_CONFIG.translation.retryCount;
+
+  const api: ApiConfig = {
+    ...DEFAULT_GLOBAL_CONFIG.api,
+    maxChars: fallbackMaxChars,
+    retryCount: fallbackRetryCount,
+    ...stored.api,
+    provider: stored.api?.provider || defaultProvider,
+  };
+
+  let apiProfiles = stored.apiProfiles;
+  let activeProfileId = stored.activeProfileId;
+
+  if (!apiProfiles || Object.keys(apiProfiles).length === 0) {
+    const profName = api.model ? api.model : "Default";
+    apiProfiles = {
+      default: {
+        id: "default",
+        name: profName,
+        config: { ...api },
+      },
+    };
+    activeProfileId = "default";
+  } else {
+    for (const prof of Object.values(apiProfiles)) {
+      if (prof.config) {
+        if (prof.config.maxChars === undefined) {
+          prof.config.maxChars = fallbackMaxChars;
+        }
+        if (prof.config.retryCount === undefined) {
+          prof.config.retryCount = fallbackRetryCount;
+        }
+      }
+    }
+    if (!activeProfileId || !apiProfiles[activeProfileId]) {
+      activeProfileId = Object.keys(apiProfiles)[0];
+    }
+  }
+
   return {
-    api: {
-      ...DEFAULT_GLOBAL_CONFIG.api,
-      ...stored.api,
-      provider: stored.api?.provider || defaultProvider,
-    },
+    api,
     translation: { ...DEFAULT_GLOBAL_CONFIG.translation, ...stored.translation },
     cache: { ...DEFAULT_GLOBAL_CONFIG.cache, ...stored.cache },
     userPrompts: stored.userPrompts ?? {},
+    apiProfiles,
+    activeProfileId,
   };
 }
 

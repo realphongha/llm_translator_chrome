@@ -30,6 +30,8 @@ export interface QueueItem {
   instruction?: string;
   /** If true, skip cache lookup and always call the API */
   skipCache?: boolean;
+  /** If true, enable deeper reasoning/thinking for this item (used for inline retranslate) */
+  enableThinking?: boolean;
 }
 
 export interface TranslationResult {
@@ -89,7 +91,7 @@ function emitQueueChanged(tabId: number, count: number): void {
 
 export function enqueue(
   tabId: number,
-  items: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean }>
+  items: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean; enableThinking?: boolean }>
 ): void {
   let queue = tabQueues.get(tabId);
   if (!queue) {
@@ -106,6 +108,7 @@ export function enqueue(
       priority: item.priority ?? Infinity,
       instruction: item.instruction,
       skipCache: item.skipCache,
+      enableThinking: item.enableThinking,
     });
   }
 
@@ -162,7 +165,8 @@ async function processBatch(
     text: item.instruction ? `${item.text}\n\n${item.instruction}` : item.text,
   }));
 
-  const { batches, splitMap } = buildBatches(paragraphs, translationConfig.maxChars);
+  const maxChars = apiConfig.maxChars !== undefined ? apiConfig.maxChars : translationConfig.maxChars;
+  const { batches, splitMap } = buildBatches(paragraphs, maxChars);
   const allTranslations = new Map<number, string>();
 
   for (const batch of batches) {
@@ -323,17 +327,26 @@ async function processWithCache(
   if (uncached.length === 0) return results;
 
   // Translate uncached items
-  // Use enable_thinking for retranslate items (skipCache flag)
-  const effectiveApiConfig = uncached.some(i => i.skipCache)
-    ? { ...apiConfig, chat_template_kwargs: { ...apiConfig.chat_template_kwargs, enable_thinking: true } }
+  // Only enable thinking/reasoning for inline retranslations (items with instruction or explicit enableThinking)
+  const isInlineRetranslate = uncached.some(i => i.enableThinking || Boolean(i.instruction));
+  const effectiveApiConfig = isInlineRetranslate
+    ? {
+        ...apiConfig,
+        chat_template_kwargs: { ...apiConfig.chat_template_kwargs, enable_thinking: true },
+        ...(apiConfig.reasoning_effort === "none" || !apiConfig.reasoning_effort ? { reasoning_effort: "high" } : {}),
+      }
     : apiConfig;
+
+  const retryCount = effectiveApiConfig.retryCount !== undefined
+    ? effectiveApiConfig.retryCount
+    : translationConfig.retryCount;
 
   const job: BatchJob = {
     items: uncached,
     systemPrompt,
     apiConfig: effectiveApiConfig,
     translationConfig,
-    retryCount: translationConfig.retryCount,
+    retryCount,
     sourceLanguage,
     targetLanguage,
   };

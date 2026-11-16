@@ -27,7 +27,7 @@ import { testApiConnection, checkChromeAiStatus, checkChromeTranslatorStatus, ge
 // ── Message types ─────────────────────────────
 
 export type BgMessage =
-  | { type: "ENQUEUE"; items: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean }> }
+  | { type: "ENQUEUE"; items: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean; enableThinking?: boolean }> }
   | { type: "TRANSLATE_NOW" }
   | { type: "RETRANSLATE" }
   | { type: "GET_STATUS" }
@@ -266,7 +266,7 @@ chrome.runtime.onMessage.addListener(
 
             // Check cache immediately so cached translations don't wait in the queue
             const session = await resolveSession(tabId);
-            const uncached: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean }> = [];
+            const uncached: Array<{ text: string; elementIndex: number; priority?: number; instruction?: string; skipCache?: boolean; enableThinking?: boolean }> = [];
             const cacheHits: Array<{ elementIndex: number; translation: string }> = [];
 
             if (session) {

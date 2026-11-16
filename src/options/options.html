@@ -239,6 +239,28 @@
           </div>
 
           <div id="custom-api-fields">
+            <div class="profile-toolbar">
+              <div class="field" style="margin-bottom:0; width:100%;">
+                <div class="profile-toolbar__header">
+                  <label class="field__label" for="profile-select" style="margin-bottom:0;">API Profile</label>
+                  <div class="profile-toolbar__actions">
+                    <button type="button" id="btn-new-profile" class="btn btn--secondary btn--sm" title="Create new profile from current settings">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                      New Profile
+                    </button>
+                    <button type="button" id="btn-rename-profile" class="btn btn--secondary btn--sm" title="Rename active profile">
+                      Rename
+                    </button>
+                    <button type="button" id="btn-delete-profile" class="btn btn--danger-subtle btn--sm" title="Delete active profile">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <select id="profile-select" class="input" style="margin-top:6px;"></select>
+                <p class="field__hint">Switch between saved configurations (e.g. <code>gemini-3.8-flash</code>, <code>local-qwen</code>, <code>deepseek</code>).</p>
+              </div>
+            </div>
+
             <div class="field">
               <label class="field__label" for="api-base">API Base URL</label>
               <input type="url" id="api-base" class="input" placeholder="http://localhost:8080/v1" />
@@ -255,11 +277,28 @@
               </div>
             </div>
 
-            <div class="field">
-              <label class="field__label" for="api-model">Model</label>
-              <input type="text" id="api-model" class="input" placeholder="llama3, gpt-4o-mini, deepseek-v2..." />
+            <div class="field-row">
+              <div class="field field--half">
+                <label class="field__label" for="api-model">Model</label>
+                <input type="text" id="api-model" class="input" placeholder="llama3, gpt-4o-mini, deepseek-v2..." />
+              </div>
+              <div class="field field--half">
+                <label class="field__label" for="api-reasoning-effort">Reasoning Effort</label>
+                <input type="text" id="api-reasoning-effort" class="input" list="reasoning-effort-options" placeholder="none, low, medium, high" />
+                <datalist id="reasoning-effort-options">
+                  <option value="none">
+                  <option value="low">
+                  <option value="medium">
+                  <option value="high">
+                </datalist>
+                <p class="field__hint">Passed as <code>"reasoning_effort"</code> (Gemini 3.8 Flash, OpenAI o1/o3, vLLM, etc.)</p>
+              </div>
             </div>
           </div>
+
+          <div class="field-separator"></div>
+          <h3 class="subsection-title" style="margin-bottom:8px">Batching &amp; Concurrency</h3>
+          <p class="field__hint" style="margin-bottom:12px">Control request throughput, batch size limits, timeout, and retry attempts for this profile.</p>
 
           <div class="field-row">
             <div class="field field--third">
@@ -270,11 +309,25 @@
             <div class="field field--third">
               <label class="field__label" for="api-chunk-size">Chunk Size</label>
               <input type="number" id="api-chunk-size" class="input" min="1" max="50" value="8" />
-              <p class="field__hint">Paragraphs per request</p>
+              <p class="field__hint">Paragraphs per batch</p>
             </div>
             <div class="field field--third">
+              <label class="field__label" for="api-max-chars">Max Chars / Request</label>
+              <input type="number" id="api-max-chars" class="input" min="500" max="50000" value="4000" />
+              <p class="field__hint">Batch character limit</p>
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div class="field field--half">
               <label class="field__label" for="api-timeout">Timeout (seconds)</label>
               <input type="number" id="api-timeout" class="input" min="5" max="300" value="60" />
+              <p class="field__hint">Request abort timeout</p>
+            </div>
+            <div class="field field--half">
+              <label class="field__label" for="api-retry-count">Retry Count</label>
+              <input type="number" id="api-retry-count" class="input" min="0" max="10" value="3" />
+              <p class="field__hint">Attempts on failed requests</p>
             </div>
           </div>
 
@@ -331,25 +384,25 @@
       <!-- ── Translation Section ── -->
       <section id="translation" class="section">
         <div class="section__header">
-          <h1 class="section__title">Translation Settings</h1>
-          <p class="section__desc">Control batch size and retry behavior.</p>
+          <h1 class="section__title">Global Translation Defaults</h1>
+          <p class="section__desc">Default batch size and retry behavior applied as fallbacks when not configured in an API profile.</p>
         </div>
 
         <div class="card">
           <div class="field">
-            <label class="field__label" for="max-chars">Max Characters Per Request</label>
+            <label class="field__label" for="max-chars">Default Max Characters Per Request</label>
             <input type="number" id="max-chars" class="input" min="500" max="50000" value="4000" />
-            <p class="field__hint">Multiple paragraphs are batched until this limit is reached.</p>
+            <p class="field__hint">Multiple paragraphs are batched until this limit is reached (profile settings take precedence).</p>
           </div>
           <div class="field">
-            <label class="field__label" for="retry-count">Retry Count</label>
+            <label class="field__label" for="retry-count">Default Retry Count</label>
             <input type="number" id="retry-count" class="input" min="0" max="10" value="3" />
-            <p class="field__hint">Number of retry attempts on failed requests.</p>
+            <p class="field__hint">Number of retry attempts on failed requests (profile settings take precedence).</p>
           </div>
         </div>
 
         <div class="actions-bar">
-          <button id="btn-save-translation" class="btn btn--primary">Save Translation Settings</button>
+          <button id="btn-save-translation" class="btn btn--primary">Save Global Defaults</button>
         </div>
       </section>
 

@@ -1003,7 +1003,7 @@ async function retranslateElement(el: Element, withComment: boolean): Promise<{ 
   // Build instruction with previous translation for context
   const instruction = buildRetranslateInstruction(previousTranslation, comment || undefined);
 
-  // Enqueue with skipCache so the API is called fresh
+  // Enqueue with skipCache so the API is called fresh, and enable deeper thinking for inline correction
   const response = await sendToBackground({
     type: "ENQUEUE",
     items: [{
@@ -1014,6 +1014,7 @@ async function retranslateElement(el: Element, withComment: boolean): Promise<{ 
         : undefined,
       instruction,
       skipCache: true,
+      enableThinking: true,
     }],
   });
 
@@ -1085,9 +1086,27 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   const hostname = location.hostname;
   const siteKey = "site_" + hostname;
 
-  if (changes["global_config"] || changes[siteKey]) {
-    console.log("[LLM Translator] Config changed in storage, reloading site configuration...");
-    reloadAndRetranslate().catch(console.error);
+  if (changes["global_config"]) {
+    // Refresh active engine metadata; DO NOT retranslate open pages automatically
+    sendToBackground({ type: "GET_SITE_CONFIG", hostname })
+      .then((res) => {
+        if (res.ok) {
+          activeProvider = (res as any).apiProvider || "custom";
+          activeModel = (res as any).apiModel || "";
+          console.log(`[LLM Translator] Global config updated. Active engine: ${getEngineLabel()} (${activeProvider})`);
+        }
+      })
+      .catch(() => {});
+  }
+
+  if (changes[siteKey]) {
+    const oldVal = changes[siteKey].oldValue as SiteConfig | undefined;
+    const newVal = changes[siteKey].newValue as SiteConfig | undefined;
+    // Only reload and retranslate if mode, targetLanguage, or prompt changed for this specific site
+    if (newVal && (!oldVal || oldVal.mode !== newVal.mode || oldVal.targetLanguage !== newVal.targetLanguage || oldVal.prompt !== newVal.prompt)) {
+      console.log("[LLM Translator] Relevant site config changed, reloading...");
+      reloadAndRetranslate().catch(console.error);
+    }
   }
 });
 

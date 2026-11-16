@@ -9,7 +9,7 @@ import {
   saveSiteConfig,
   deleteSiteConfig,
 } from "../storage/config";
-import type { GlobalConfig, SiteConfig, UserPrompt } from "../storage/config";
+import type { GlobalConfig, SiteConfig, UserPrompt, ApiConfig, ApiProfile, TranslationProvider } from "../storage/config";
 import { BUILTIN_PROMPTS } from "../prompts/builtins";
 import { SOURCE_LANGUAGES, TARGET_LANGUAGES } from "../utils/language";
 
@@ -92,9 +92,16 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   const apiBase = document.getElementById("api-base") as HTMLInputElement;
   const apiKey = document.getElementById("api-key") as HTMLInputElement;
   const apiModel = document.getElementById("api-model") as HTMLInputElement;
+  const apiReasoningEffort = document.getElementById("api-reasoning-effort") as HTMLInputElement;
+  const profileSelect = document.getElementById("profile-select") as HTMLSelectElement;
+  const btnNewProfile = document.getElementById("btn-new-profile")!;
+  const btnRenameProfile = document.getElementById("btn-rename-profile")!;
+  const btnDeleteProfile = document.getElementById("btn-delete-profile")!;
   const apiParallel = document.getElementById("api-parallel") as HTMLInputElement;
   const apiChunkSize = document.getElementById("api-chunk-size") as HTMLInputElement;
+  const apiMaxChars = document.getElementById("api-max-chars") as HTMLInputElement;
   const apiTimeout = document.getElementById("api-timeout") as HTMLInputElement;
+  const apiRetryCount = document.getElementById("api-retry-count") as HTMLInputElement;
   const apiTemperature = document.getElementById("api-temperature") as HTMLInputElement;
   const apiTopP = document.getElementById("api-top-p") as HTMLInputElement;
   const apiTopK = document.getElementById("api-top-k") as HTMLInputElement;
@@ -173,18 +180,189 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
     }
   }
 
-  apiBase.value = config.api.base;
-  apiKey.value = config.api.key;
-  apiModel.value = config.api.model;
-  apiParallel.value = String(config.api.parallelCalls);
-  apiChunkSize.value = String(config.api.chunkSize);
-  apiTimeout.value = String(config.api.timeout);
-  apiTemperature.value = config.api.temperature !== undefined ? String(config.api.temperature) : "0.3";
-  apiTopP.value = config.api.top_p !== undefined ? String(config.api.top_p) : "0.95";
-  apiTopK.value = config.api.top_k !== undefined ? String(config.api.top_k) : "64";
-  if (config.api.min_p !== undefined) apiMinP.value = String(config.api.min_p);
-  if (config.api.presence_penalty !== undefined) apiPresencePenalty.value = String(config.api.presence_penalty);
-  apiChatTemplateKwargs.value = config.api.chat_template_kwargs !== undefined ? JSON.stringify(config.api.chat_template_kwargs) : '{"enable_thinking":false}';
+  let currentProfiles: Record<string, ApiProfile> = config.apiProfiles && Object.keys(config.apiProfiles).length > 0
+    ? { ...config.apiProfiles }
+    : {
+        default: {
+          id: "default",
+          name: config.api.model ? config.api.model : "Default",
+          config: { ...config.api },
+        },
+      };
+
+  let activeProfileId: string = config.activeProfileId && currentProfiles[config.activeProfileId]
+    ? config.activeProfileId
+    : Object.keys(currentProfiles)[0] || "default";
+
+  function fillFormFromApiConfig(apiCfg: ApiConfig): void {
+    apiBase.value = apiCfg.base || "";
+    apiKey.value = apiCfg.key || "";
+    apiModel.value = apiCfg.model || "";
+    apiReasoningEffort.value = apiCfg.reasoning_effort || "";
+    apiParallel.value = String(apiCfg.parallelCalls ?? 8);
+    apiChunkSize.value = String(apiCfg.chunkSize ?? 8);
+    apiMaxChars.value = String(apiCfg.maxChars ?? config.translation?.maxChars ?? 4000);
+    apiTimeout.value = String(apiCfg.timeout ?? 60);
+    apiRetryCount.value = String(apiCfg.retryCount ?? config.translation?.retryCount ?? 3);
+    apiTemperature.value = apiCfg.temperature !== undefined ? String(apiCfg.temperature) : "0.3";
+    apiTopP.value = apiCfg.top_p !== undefined ? String(apiCfg.top_p) : "0.95";
+    apiTopK.value = apiCfg.top_k !== undefined ? String(apiCfg.top_k) : "64";
+    apiMinP.value = apiCfg.min_p !== undefined ? String(apiCfg.min_p) : "";
+    apiPresencePenalty.value = apiCfg.presence_penalty !== undefined ? String(apiCfg.presence_penalty) : "";
+    apiChatTemplateKwargs.value = apiCfg.chat_template_kwargs !== undefined
+      ? JSON.stringify(apiCfg.chat_template_kwargs)
+      : '{"enable_thinking":false}';
+  }
+
+  function renderProfileSelect(): void {
+    profileSelect.innerHTML = "";
+    for (const [id, prof] of Object.entries(currentProfiles)) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = prof.name + (prof.config?.model ? ` (${prof.config.model})` : "");
+      if (id === activeProfileId) {
+        opt.selected = true;
+      }
+      profileSelect.appendChild(opt);
+    }
+  }
+
+  function getFormApiConfig(provider: TranslationProvider): { config: ApiConfig; error?: string } {
+    let kwargs: Record<string, unknown> | undefined = { enable_thinking: false };
+    const kwargsRaw = apiChatTemplateKwargs.value.trim();
+    if (kwargsRaw) {
+      try {
+        kwargs = JSON.parse(kwargsRaw);
+      } catch {
+        return { config: null as any, error: "Invalid JSON in Chat Template Kwargs" };
+      }
+    } else {
+      kwargs = { enable_thinking: false };
+    }
+
+    const cfg: ApiConfig = {
+      provider,
+      base: apiBase.value.trim(),
+      key: apiKey.value.trim(),
+      model: apiModel.value.trim(),
+      reasoning_effort: apiReasoningEffort.value.trim() || undefined,
+      parallelCalls: parseInt(apiParallel.value) || 8,
+      chunkSize: parseInt(apiChunkSize.value) || 8,
+      maxChars: parseInt(apiMaxChars.value) || 4000,
+      timeout: parseInt(apiTimeout.value) || 60,
+      retryCount: parseInt(apiRetryCount.value) >= 0 ? parseInt(apiRetryCount.value) : 3,
+      temperature: apiTemperature.value ? parseFloat(apiTemperature.value) : 0.3,
+      top_p: apiTopP.value ? parseFloat(apiTopP.value) : 0.95,
+      top_k: apiTopK.value ? parseInt(apiTopK.value) : 64,
+      min_p: apiMinP.value ? parseFloat(apiMinP.value) : undefined,
+      presence_penalty: apiPresencePenalty.value ? parseFloat(apiPresencePenalty.value) : undefined,
+      chat_template_kwargs: kwargs,
+    };
+    return { config: cfg };
+  }
+
+  // Populate active profile
+  const initialActive = currentProfiles[activeProfileId]?.config || config.api;
+  fillFormFromApiConfig(initialActive);
+  renderProfileSelect();
+
+  profileSelect.addEventListener("change", async () => {
+    const selectedId = profileSelect.value;
+    if (!currentProfiles[selectedId]) return;
+
+    activeProfileId = selectedId;
+    const prof = currentProfiles[selectedId];
+    fillFormFromApiConfig(prof.config);
+
+    try {
+      const cfg = await loadGlobalConfig();
+      cfg.activeProfileId = activeProfileId;
+      cfg.api = {
+        ...prof.config,
+        provider: cfg.api.provider,
+      };
+      cfg.apiProfiles = currentProfiles;
+      await saveGlobalConfig(cfg);
+      showToast(`Switched profile to: ${prof.name}`);
+    } catch {}
+  });
+
+  btnNewProfile.addEventListener("click", async () => {
+    const currentModel = apiModel.value.trim();
+    const defaultSuggest = currentModel ? `${currentModel}` : `Profile ${Object.keys(currentProfiles).length + 1}`;
+    const name = prompt("Enter a name for the new profile:", defaultSuggest);
+    if (!name || !name.trim()) return;
+
+    const newId = `prof_${Date.now()}`;
+    const selectedRadio = document.querySelector<HTMLInputElement>('input[name="api-provider"]:checked');
+    const provider = (selectedRadio?.value as TranslationProvider) || "custom";
+    const { config: newApiConfig, error } = getFormApiConfig(provider);
+    if (error) {
+      showToast(error, "error");
+      return;
+    }
+
+    currentProfiles[newId] = {
+      id: newId,
+      name: name.trim(),
+      config: newApiConfig,
+    };
+    activeProfileId = newId;
+
+    const cfg = await loadGlobalConfig();
+    cfg.apiProfiles = currentProfiles;
+    cfg.activeProfileId = activeProfileId;
+    cfg.api = newApiConfig;
+    await saveGlobalConfig(cfg);
+
+    renderProfileSelect();
+    showToast(`Profile "${name.trim()}" created!`);
+  });
+
+  btnRenameProfile.addEventListener("click", async () => {
+    if (!currentProfiles[activeProfileId]) return;
+    const current = currentProfiles[activeProfileId];
+    const newName = prompt("Rename profile:", current.name);
+    if (!newName || !newName.trim() || newName.trim() === current.name) return;
+
+    current.name = newName.trim();
+    const cfg = await loadGlobalConfig();
+    cfg.apiProfiles = currentProfiles;
+    await saveGlobalConfig(cfg);
+
+    renderProfileSelect();
+    showToast(`Profile renamed to "${current.name}"`);
+  });
+
+  btnDeleteProfile.addEventListener("click", async () => {
+    const ids = Object.keys(currentProfiles);
+    if (ids.length <= 1) {
+      showToast("Cannot delete the only remaining profile.", "error");
+      return;
+    }
+    const current = currentProfiles[activeProfileId];
+    if (!confirm(`Are you sure you want to delete profile "${current?.name || activeProfileId}"?`)) {
+      return;
+    }
+
+    delete currentProfiles[activeProfileId];
+    const remainingIds = Object.keys(currentProfiles);
+    activeProfileId = remainingIds[0];
+    const nextProfile = currentProfiles[activeProfileId];
+    fillFormFromApiConfig(nextProfile.config);
+
+    const cfg = await loadGlobalConfig();
+    cfg.apiProfiles = currentProfiles;
+    cfg.activeProfileId = activeProfileId;
+    cfg.api = {
+      ...nextProfile.config,
+      provider: cfg.api.provider,
+    };
+    await saveGlobalConfig(cfg);
+
+    renderProfileSelect();
+    showToast(`Profile deleted. Switched to "${nextProfile.name}".`);
+  });
 
   // Status check helper
   async function refreshBuiltinStatus(provider: string): Promise<void> {
@@ -406,41 +584,39 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
   // Save
   btnSaveApi.addEventListener("click", async () => {
     const selectedRadio = document.querySelector<HTMLInputElement>('input[name="api-provider"]:checked');
-    const provider = (selectedRadio?.value as import("../storage/config").TranslationProvider) || "custom";
+    const provider = (selectedRadio?.value as TranslationProvider) || "custom";
+
+    const { config: updatedApi, error } = getFormApiConfig(provider);
+    if (error) {
+      showToast(error, "error");
+      return;
+    }
 
     const cfg = await loadGlobalConfig();
-    cfg.api = {
-      provider,
-      base: apiBase.value.trim(),
-      key: apiKey.value.trim(),
-      model: apiModel.value.trim(),
-      parallelCalls: parseInt(apiParallel.value) || 8,
-      chunkSize: parseInt(apiChunkSize.value) || 8,
-      timeout: parseInt(apiTimeout.value) || 60,
-      temperature: apiTemperature.value ? parseFloat(apiTemperature.value) : 0.3,
-      top_p: apiTopP.value ? parseFloat(apiTopP.value) : 0.95,
-      top_k: apiTopK.value ? parseInt(apiTopK.value) : 64,
-      min_p: apiMinP.value ? parseFloat(apiMinP.value) : undefined,
-      presence_penalty: apiPresencePenalty.value ? parseFloat(apiPresencePenalty.value) : undefined,
+    cfg.api = updatedApi;
+    cfg.translation = {
+      maxChars: updatedApi.maxChars ?? cfg.translation.maxChars,
+      retryCount: updatedApi.retryCount ?? cfg.translation.retryCount,
     };
 
-    // Parse chat_template_kwargs JSON
-    const kwargsRaw = apiChatTemplateKwargs.value.trim();
-    if (kwargsRaw) {
-      try {
-        cfg.api.chat_template_kwargs = JSON.parse(kwargsRaw);
-      } catch {
-        showToast("Invalid JSON in Chat Template Kwargs", "error");
-        return;
-      }
+    if (!currentProfiles[activeProfileId]) {
+      currentProfiles[activeProfileId] = {
+        id: activeProfileId,
+        name: updatedApi.model || "Default",
+        config: updatedApi,
+      };
     } else {
-      cfg.api.chat_template_kwargs = { enable_thinking: false };
+      currentProfiles[activeProfileId].config = { ...updatedApi };
     }
+    cfg.apiProfiles = currentProfiles;
+    cfg.activeProfileId = activeProfileId;
+
     await saveGlobalConfig(cfg);
     await chrome.storage.local.set({ hasSeenWelcomeBanner: true });
     if (firstRunBanner && firstRunBanner.style.display !== "none") {
       firstRunBanner.style.display = "none";
     }
+    renderProfileSelect();
     showToast("API settings saved!");
   });
 
@@ -451,7 +627,7 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
     testResult.style.opacity = "1";
 
     const selectedRadio = document.querySelector<HTMLInputElement>('input[name="api-provider"]:checked');
-    const provider = (selectedRadio?.value as import("../storage/config").TranslationProvider) || "custom";
+    const provider = (selectedRadio?.value as TranslationProvider) || "custom";
 
     try {
       const responsePromise = sendToBackground({
@@ -461,6 +637,7 @@ async function initApiSection(config: GlobalConfig): Promise<void> {
           base: apiBase.value.trim(),
           key: apiKey.value.trim(),
           model: apiModel.value.trim(),
+          reasoning_effort: apiReasoningEffort.value.trim() || undefined,
         },
       }) as Promise<{
         ok: boolean;

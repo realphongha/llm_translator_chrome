@@ -41,6 +41,7 @@ export interface ChatCompletionRequest {
   min_p?: number;
   presence_penalty?: number;
   chat_template_kwargs?: Record<string, unknown>;
+  reasoning_effort?: string;
 }
 
 export interface ChatCompletionResponse {
@@ -473,9 +474,12 @@ export async function callChatCompletions(
   if (config.top_k !== undefined) body.top_k = config.top_k;
   if (config.min_p !== undefined) body.min_p = config.min_p;
   if (config.presence_penalty !== undefined) body.presence_penalty = config.presence_penalty;
+  if (config.reasoning_effort && config.reasoning_effort.trim()) {
+    body.reasoning_effort = config.reasoning_effort.trim();
+  }
   body.chat_template_kwargs = config.chat_template_kwargs ?? { enable_thinking: false };
 
-  console.log(`[LLM API] ${config.model}`);
+  console.log(`[LLM API] ${config.model}${config.reasoning_effort ? ` (reasoning_effort: ${config.reasoning_effort})` : ""}`);
   console.log("System:", systemPrompt);
   console.log("User:", userPrompt);
 
